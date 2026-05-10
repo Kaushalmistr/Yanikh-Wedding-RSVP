@@ -33,6 +33,15 @@ export interface Guest {
     age: number;
     gender: 'Male' | 'Female' | 'Other';
     relation: string;
+    mobile: string;
+    email: string;
+    // Travel Details
+    travelMode?: string;
+    pnrNumber?: string;
+    ticketFile?: File | null;
+    // Government ID
+    govIdType?: string;
+    govIdFile?: File | null;
   }>;
   
   // Accommodation
