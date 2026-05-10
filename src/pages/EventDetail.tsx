@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getGuestsByEvent, type WeddingEvent, type Guest } from '../lib/db';
-import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2 } from 'lucide-react';
+import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase } from 'lucide-react';
 import { DEFAULT_COVER_IMAGE } from '../lib/constants';
 
 export default function EventDetail() {
@@ -11,6 +11,15 @@ export default function EventDetail() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
   const [showGuestListTable, setShowGuestListTable] = useState(false);
+  const [expandedGuests, setExpandedGuests] = useState<string[]>([]);
+
+  const toggleGuestExpanded = (guestId: string) => {
+    setExpandedGuests(prev => 
+      prev.includes(guestId)
+        ? prev.filter(id => id !== guestId)
+        : [...prev, guestId]
+    );
+  };
 
   useEffect(() => {
     if (id) {
@@ -102,7 +111,13 @@ export default function EventDetail() {
             return (
               <div
                 key={idx}
-                onClick={() => feature.label === 'Guest List' && setShowGuestListTable(true)}
+                onClick={() => {
+                  if (feature.label === 'Guest List') {
+                    setShowGuestListTable(true);
+                  } else if (feature.label === 'RSVP') {
+                    navigate(`/rsvp/${id}`);
+                  }
+                }}
                 className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-gray-100 hover:shadow-xl transition-all cursor-pointer min-h-[250px]"
               >
                 <div className={`bg-gradient-to-br ${feature.color} p-5 rounded-full mb-6 transition-transform hover:scale-110`}>
@@ -133,62 +148,100 @@ export default function EventDetail() {
                 <p className="text-gray-500 text-lg">No guests have responded yet</p>
               </div>
             ) : (
-              <div className="bg-white border-b border-gray-200 overflow-hidden shadow-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-max">
-                    <thead>
-                      <tr className="bg-gray-50 border-b">
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Name</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Mobile</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">City</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Attendance</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Adults</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Children</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Infants</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Accommodation</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Meal Preference</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Dietary Restrictions</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Special Assistance</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Notes</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Submitted</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {guests.map((guest) => (
-                        <tr key={guest.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-gray-900">{guest.name}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{guest.email}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{guest.mobile}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{guest.city}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              guest.attendanceStatus === 'Yes' ? 'bg-green-100 text-green-700' :
-                              guest.attendanceStatus === 'Maybe' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                            }`}>
-                              {guest.attendanceStatus}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600 text-center font-medium">{guest.adults}</td>
-                          <td className="px-6 py-4 text-gray-600 text-center font-medium">{guest.children}</td>
-                          <td className="px-6 py-4 text-gray-600 text-center font-medium">{guest.infants}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              guest.needsAccommodation ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {guest.needsAccommodation ? 'Yes' : 'No'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{guest.mealPreference || '-'}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm max-w-xs truncate">{guest.dietaryRestrictions || '-'}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm max-w-xs truncate">{guest.specialAssistance?.join(', ') || '-'}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm max-w-xs truncate">{guest.additionalNotes || '-'}</td>
-                          <td className="px-6 py-4 text-gray-600 text-sm">{new Date(guest.submittedAt).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div className="space-y-4 px-6">
+                <div className="text-sm text-gray-600 mb-4">
+                  Total Guests: <strong>{guests.reduce((sum, g) => sum + 1 + (g.additionalGuests?.length || 0), 0)}</strong>
                 </div>
+                {guests.map((guest) => (
+                  <div key={guest.id} className="border border-gray-300 rounded-xl overflow-hidden bg-white">
+                    {/* Main Guest Header */}
+                    <div
+                      onClick={() => toggleGuestExpanded(guest.id)}
+                      className="flex items-center gap-3 px-6 py-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                    >
+                      <div className="flex-shrink-0">
+                        {guest.additionalGuests && guest.additionalGuests.length > 0 ? (
+                          expandedGuests.includes(guest.id) ? (
+                            <ChevronDown className="w-5 h-5 text-gray-600" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-gray-600" />
+                          )
+                        ) : (
+                          <div className="w-5" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 text-lg">{guest.name}</div>
+                        <div className="text-sm text-gray-500">Main Guest • {guest.city}</div>
+                      </div>
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          guest.attendanceStatus === 'Yes' ? 'bg-green-100 text-green-700' :
+                          guest.attendanceStatus === 'Maybe' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {guest.attendanceStatus}
+                        </span>
+                        <span className="text-sm text-gray-600 font-medium bg-gray-100 px-3 py-1 rounded-full">
+                          {1 + (guest.additionalGuests?.length || 0)} guest{1 + (guest.additionalGuests?.length || 0) !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Main Guest Details (Always Visible) */}
+                    <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 space-y-3 text-sm">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{guest.email}</span></div>
+                        <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{guest.mobile}</span></div>
+                        <div><span className="text-gray-600">Meal:</span> <span className="font-medium">{guest.mealPreference || '-'}</span></div>
+                        <div><span className="text-gray-600">Accommodation:</span> <span className="font-medium">{guest.needsAccommodation ? 'Yes' : 'No'}</span></div>
+                      </div>
+                      {guest.dietaryRestrictions && <div><span className="text-gray-600">Dietary:</span> <span className="font-medium">{guest.dietaryRestrictions}</span></div>}
+                      {guest.additionalNotes && <div><span className="text-gray-600">Notes:</span> <span className="font-medium italic">{guest.additionalNotes}</span></div>}
+                      <div className="text-xs text-gray-500 pt-2">Submitted: {new Date(guest.submittedAt).toLocaleDateString()}</div>
+                    </div>
+
+                    {/* Additional Guests (Expandable) */}
+                    {guest.additionalGuests && guest.additionalGuests.length > 0 && expandedGuests.includes(guest.id) && (
+                      <div className="px-6 py-4 space-y-3 bg-white">
+                        <h4 className="font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                          <Users className="w-4 h-4" /> Additional Guests ({guest.additionalGuests.length})
+                        </h4>
+                        {guest.additionalGuests.map((addGuest, idx) => (
+                          <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50 ml-6">
+                            <div className="mb-3">
+                              <div className="font-semibold text-gray-900">{addGuest.name}</div>
+                              <div className="text-sm text-gray-600">{addGuest.relation} • {addGuest.age} years • {addGuest.gender}</div>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{addGuest.mobile}</span></div>
+                                <div><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{addGuest.email}</span></div>
+                              </div>
+                              {addGuest.travelMode && (
+                                <div className="border-t pt-2 mt-2">
+                                  <div className="font-medium text-gray-800 flex items-center gap-2 mb-2">
+                                    {addGuest.travelMode === 'By Flight' ? <Plane className="w-4 h-4" /> : addGuest.travelMode === 'By Train' ? <Train className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
+                                    Travel: {addGuest.travelMode}
+                                  </div>
+                                  {addGuest.pnrNumber && <div><span className="text-gray-600">PNR:</span> <span className="font-medium">{addGuest.pnrNumber}</span></div>}
+                                  {addGuest.ticketFile && <div><span className="text-green-600">✓ Ticket Uploaded</span></div>}
+                                </div>
+                              )}
+                              {addGuest.govIdType && (
+                                <div className="border-t pt-2 mt-2">
+                                  <div className="font-medium text-gray-800 flex items-center gap-2 mb-2">
+                                    <Briefcase className="w-4 h-4" /> ID: {addGuest.govIdType}
+                                  </div>
+                                  {addGuest.govIdFile && <div><span className="text-green-600">✓ ID Proof Uploaded</span></div>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

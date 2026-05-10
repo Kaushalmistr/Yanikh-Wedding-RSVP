@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
-import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User } from 'lucide-react';
+import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase } from 'lucide-react';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
-const TRAVEL_MODES = ['By Flight', 'By Train', 'By Car'];
+const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
 const FUNCTIONS = ['Welcome Lunch', 'Mehendi', 'Sangeet', 'Haldi', 'Wedding Ceremony', 'Reception', 'Farewell Brunch'];
 
 export default function RSVPForm() {
@@ -14,6 +14,7 @@ export default function RSVPForm() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [expandedGuests, setExpandedGuests] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -24,16 +25,18 @@ export default function RSVPForm() {
     respondingFor: 'Self' as 'Self' | 'Couple' | 'Family',
     attendanceStatus: 'Yes' as 'Yes' | 'Maybe' | 'Cannot attend',
     functionAttendance: {} as Record<string, 'Yes' | 'No'>,
-    additionalGuests: [] as Array<{ name: string; age: number; gender: string; relation: string }>,
+    additionalGuests: [] as Array<{ name: string; age: number; gender: 'Male' | 'Female' | 'Other'; relation: string; mobile: string; email: string; travelMode?: string; ticketFile?: File | null; pnrNumber?: string; govIdType?: string; govIdFile?: File | null }>,
     needsAccommodation: false,
     checkInDate: '',
     checkOutDate: '',
     numberOfRooms: 1,
     roomPreference: '',
     preferredRoommates: '',
-    travelMode: '',
+    personalTravelMode: '',
     flightTicket: null as File | null,
     trainTicket: null as File | null,
+    flightPnr: '',
+    trainPnr: '',
     idType: '',
     idNumber: '',
     idFront: null as File | null,
@@ -47,7 +50,31 @@ export default function RSVPForm() {
     dataConsent: false,
   });
 
-  const [newGuest, setNewGuest] = useState({ name: '', age: 0, gender: 'Male', relation: '' });
+  const [newGuest, setNewGuest] = useState<{ 
+    name: string; 
+    age: number; 
+    gender: 'Male' | 'Female' | 'Other'; 
+    relation: string;
+    mobile: string;
+    email: string;
+    travelMode: string;
+    ticketFile: File | null;
+    pnrNumber: string;
+    govIdType: string;
+    govIdFile: File | null;
+  }>({
+    name: '', 
+    age: 0, 
+    gender: 'Male', 
+    relation: '',
+    mobile: '',
+    email: '',
+    travelMode: '',
+    ticketFile: null,
+    pnrNumber: '',
+    govIdType: '',
+    govIdFile: null
+  });
 
   useEffect(() => {
     if (id) {
@@ -70,31 +97,37 @@ export default function RSVPForm() {
     }));
   };
 
-  const toggleAssistance = (item: string) => {
-    setFormData(prev => ({
-      ...prev,
-      specialAssistance: prev.specialAssistance.includes(item)
-        ? prev.specialAssistance.filter(i => i !== item)
-        : [...prev.specialAssistance, item]
-    }));
-  };
-
-  const toggleParticipation = (item: string) => {
-    setFormData(prev => ({
-      ...prev,
-      celebrationParticipation: prev.celebrationParticipation.includes(item)
-        ? prev.celebrationParticipation.filter(i => i !== item)
-        : [...prev.celebrationParticipation, item]
-    }));
+  const toggleGuestExpanded = (index: number) => {
+    setExpandedGuests(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
   };
 
   const addAdditionalGuest = () => {
-    if (!newGuest.name || !newGuest.relation) return;
+    if (!newGuest.name || !newGuest.relation || !newGuest.mobile || !newGuest.email) {
+      setError('Please fill all guest details (Name, Relation, Mobile, Email)');
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       additionalGuests: [...prev.additionalGuests, { ...newGuest }]
     }));
-    setNewGuest({ name: '', age: 0, gender: 'Male', relation: '' });
+    setNewGuest({ 
+      name: '', 
+      age: 0, 
+      gender: 'Male', 
+      relation: '',
+      mobile: '',
+      email: '',
+      travelMode: '',
+      ticketFile: null,
+      pnrNumber: '',
+      govIdType: '',
+      govIdFile: null
+    });
+    setError('');
   };
 
   const removeAdditionalGuest = (index: number) => {
@@ -111,7 +144,7 @@ export default function RSVPForm() {
         return false;
       }
     }
-    if (step === 5) {
+    if (step === 4) {
       if (!formData.infoAccurate || !formData.dataConsent) {
         setError('Please confirm the declaration');
         return false;
@@ -121,7 +154,7 @@ export default function RSVPForm() {
     return true;
   };
 
-  const nextStep = () => { if (validateStep()) setStep(s => Math.min(s + 1, 5)); };
+  const nextStep = () => { if (validateStep()) setStep(s => Math.min(s + 1, 4)); };
   const prevStep = () => { setStep(s => Math.max(s - 1, 1)); setError(''); };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -131,7 +164,6 @@ export default function RSVPForm() {
     addGuest({
       eventId: id,
       name: formData.name,
-      gender: formData.gender,
       mobile: formData.mobile,
       email: formData.email,
       city: formData.city,
@@ -148,7 +180,7 @@ export default function RSVPForm() {
       numberOfRooms: formData.numberOfRooms,
       roomPreference: formData.roomPreference,
       preferredRoommates: formData.preferredRoommates,
-      travelMode: formData.travelMode,
+      arrivalMode: formData.personalTravelMode,
       idType: formData.idType,
       idNumber: formData.idNumber,
       mealPreference: formData.mealPreference,
@@ -158,7 +190,10 @@ export default function RSVPForm() {
       additionalNotes: formData.additionalNotes,
       infoAccurate: formData.infoAccurate,
       dataConsent: formData.dataConsent,
-      submittedAt: new Date().toISOString(),
+      needsPickup: false,
+      needsDrop: false,
+      transferPassengers: 0,
+      transferBags: 0,
     });
 
     setSuccess(true);
@@ -166,12 +201,117 @@ export default function RSVPForm() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl shadow-2xl p-12 max-w-md text-center">
-          <CheckCircle className="w-20 h-20 text-emerald-500 mx-auto mb-6" />
-          <h2 className="text-3xl font-bold mb-3">Thank You!</h2>
-          <p className="text-gray-600">Your RSVP has been successfully submitted.</p>
-          <button onClick={() => navigate('/dashboard')} className="mt-8 px-10 py-3 bg-rose-600 text-white rounded-2xl font-medium">Back to Dashboard</button>
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-3xl shadow-2xl p-12 mb-8">
+            <div className="text-center mb-12">
+              <CheckCircle className="w-20 h-20 text-emerald-500 mx-auto mb-6" />
+              <h2 className="text-4xl font-bold mb-3">Thank You! RSVP Submitted</h2>
+              <p className="text-gray-600 text-lg">Your response has been successfully recorded.</p>
+            </div>
+
+            {/* Submitted Details */}
+            <div className="space-y-8">
+              {/* Main Guest */}
+              <div className="border-b pb-8">
+                <h3 className="text-2xl font-bold mb-6 text-gray-900">Main Guest Details</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Name</p>
+                    <p className="text-lg font-semibold">{formData.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Email</p>
+                    <p className="text-lg font-semibold">{formData.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Mobile</p>
+                    <p className="text-lg font-semibold">{formData.mobile}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">City</p>
+                    <p className="text-lg font-semibold">{formData.city}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Gender</p>
+                    <p className="text-lg font-semibold">{formData.gender}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Attendance</p>
+                    <p className={`text-lg font-semibold ${formData.attendanceStatus === 'Yes' ? 'text-green-600' : formData.attendanceStatus === 'Maybe' ? 'text-yellow-600' : 'text-red-600'}`}>{formData.attendanceStatus}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accommodation */}
+              {formData.needsAccommodation && (
+                <div className="border-b pb-8">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Accommodation Details</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div><p className="text-sm text-gray-500">Check-in</p><p className="font-semibold">{formData.checkInDate}</p></div>
+                    <div><p className="text-sm text-gray-500">Check-out</p><p className="font-semibold">{formData.checkOutDate}</p></div>
+                    <div><p className="text-sm text-gray-500">Rooms Needed</p><p className="font-semibold">{formData.numberOfRooms}</p></div>
+                    {formData.roomPreference && <div><p className="text-sm text-gray-500">Preference</p><p className="font-semibold">{formData.roomPreference}</p></div>}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Guests */}
+              {formData.additionalGuests.length > 0 && (
+                <div className="border-b pb-8">
+                  <h3 className="text-2xl font-bold mb-6 text-gray-900">Additional Guests ({formData.additionalGuests.length})</h3>
+                  <div className="space-y-4">
+                    {formData.additionalGuests.map((guest, idx) => (
+                      <div key={idx} className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
+                        <h4 className="font-bold text-lg mb-4 text-gray-900">Guest {idx + 1}: {guest.name}</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div><p className="text-sm text-gray-500">Age</p><p className="font-semibold">{guest.age} years</p></div>
+                          <div><p className="text-sm text-gray-500">Gender</p><p className="font-semibold">{guest.gender}</p></div>
+                          <div><p className="text-sm text-gray-500">Relation</p><p className="font-semibold">{guest.relation}</p></div>
+                          <div><p className="text-sm text-gray-500">Mobile</p><p className="font-semibold">{guest.mobile}</p></div>
+                          <div className="md:col-span-2"><p className="text-sm text-gray-500">Email</p><p className="font-semibold">{guest.email}</p></div>
+                          {guest.travelMode && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-500">Travel</p>
+                              <p className="font-semibold">{guest.travelMode} {guest.pnrNumber && `(PNR: ${guest.pnrNumber})`}</p>
+                            </div>
+                          )}
+                          {guest.govIdType && (
+                            <div className="md:col-span-2">
+                              <p className="text-sm text-gray-500">ID Proof</p>
+                              <p className="font-semibold">{guest.govIdType}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dietary & Preferences */}
+              <div className="border-b pb-8">
+                <h3 className="text-xl font-bold mb-4 text-gray-900">Preferences</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div><p className="text-sm text-gray-500">Meal Preference</p><p className="font-semibold">{formData.mealPreference}</p></div>
+                  {formData.dietaryRestrictions && <div><p className="text-sm text-gray-500">Dietary</p><p className="font-semibold">{formData.dietaryRestrictions}</p></div>}
+                  {formData.specialAssistance.length > 0 && <div><p className="text-sm text-gray-500">Assistance</p><p className="font-semibold">{formData.specialAssistance.join(', ')}</p></div>}
+                </div>
+              </div>
+
+              {/* Notes */}
+              {formData.additionalNotes && (
+                <div>
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Additional Notes</h3>
+                  <p className="text-gray-700 italic bg-gray-50 p-4 rounded-2xl">{formData.additionalNotes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <button onClick={() => navigate('/dashboard')} className="px-10 py-3 bg-rose-600 text-white rounded-2xl font-medium hover:bg-rose-700">Back to Dashboard</button>
+          </div>
         </div>
       </div>
     );
@@ -181,8 +321,7 @@ export default function RSVPForm() {
     { num: 1, title: "Personal Details" },
     { num: 2, title: "Attendance" },
     { num: 3, title: "Guests" },
-    { num: 4, title: "Travel Details" },
-    { num: 5, title: "Confirmation" },
+    { num: 4, title: "Confirmation" },
   ];
 
   return (
@@ -277,6 +416,52 @@ export default function RSVPForm() {
                   </div>
                 )}
               </div>
+
+              {/* Travel Details */}
+              <div className="border border-blue-200 rounded-3xl p-8 bg-blue-50">
+                <h3 className="text-xl font-semibold mb-6">Your Travel Details</h3>
+                <label className="block text-sm font-medium mb-4">Mode of Travel</label>
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {TRAVEL_MODES.map(mode => (
+                    <button key={mode} type="button" onClick={() => updateForm('personalTravelMode', mode)}
+                      className={`py-4 rounded-2xl border-2 font-medium transition-all ${formData.personalTravelMode === mode ? 'border-blue-500 bg-white' : 'border-gray-300 hover:border-gray-400'}`}>
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+
+                {formData.personalTravelMode === 'By Flight' && (
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200 mb-4">
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Flight PNR Number</label>
+                      <input type="text" value={formData.flightPnr} onChange={e => updateForm('flightPnr', e.target.value)} placeholder="Enter PNR" className="w-full px-5 py-4 border rounded-2xl" />
+                    </div>
+                    <label className="block text-sm font-medium mb-2">Upload Flight Ticket</label>
+                    <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm mt-2">Click to upload</span>
+                      <input type="file" className="hidden" onChange={(e) => updateForm('flightTicket', e.target.files?.[0] || null)} />
+                    </label>
+                    {formData.flightTicket && <p className="text-green-600 text-sm mt-2">✓ {formData.flightTicket.name}</p>}
+                  </div>
+                )}
+
+                {formData.personalTravelMode === 'By Train' && (
+                  <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2">Train PNR Number</label>
+                      <input type="text" value={formData.trainPnr} onChange={e => updateForm('trainPnr', e.target.value)} placeholder="Enter PNR" className="w-full px-5 py-4 border rounded-2xl" />
+                    </div>
+                    <label className="block text-sm font-medium mb-2">Upload Train Ticket</label>
+                    <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400">
+                      <Upload className="w-8 h-8 text-gray-400" />
+                      <span className="text-sm mt-2">Click to upload</span>
+                      <input type="file" className="hidden" onChange={(e) => updateForm('trainTicket', e.target.files?.[0] || null)} />
+                    </label>
+                    {formData.trainTicket && <p className="text-green-600 text-sm mt-2">✓ {formData.trainTicket.name}</p>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -320,26 +505,179 @@ export default function RSVPForm() {
                 <p className="text-gray-500 text-sm mb-6">Main guest (you) is already counted. Add other guests below.</p>
 
                 {formData.additionalGuests.length > 0 && (
-                  <div className="mb-8 space-y-3">
+                  <div className="mb-8 space-y-2 bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                    <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <Users className="w-5 h-5" /> 
+                      Guests List ({formData.additionalGuests.length})
+                    </h4>
                     {formData.additionalGuests.map((g, i) => (
-                      <div key={i} className="flex justify-between items-center bg-gray-50 px-6 py-4 rounded-2xl">
-                        <div>{g.name} • {g.age} yrs • {g.gender} • {g.relation}</div>
-                        <button onClick={() => removeAdditionalGuest(i)} className="text-red-500 text-sm font-medium">Remove</button>
+                      <div key={i} className="border border-gray-300 rounded-xl overflow-hidden bg-white">
+                        {/* Guest Header (Clickable to expand) */}
+                        <div 
+                          onClick={() => toggleGuestExpanded(i)}
+                          className="flex items-center gap-3 px-6 py-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                        >
+                          <div className="flex-shrink-0">
+                            {expandedGuests.includes(i) ? (
+                              <ChevronDown className="w-5 h-5 text-gray-600" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-900 text-lg">{g.name}</div>
+                            <div className="text-sm text-gray-500">{g.relation} • {g.age} yrs • {g.gender}</div>
+                          </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeAdditionalGuest(i);
+                            }}
+                            className="flex-shrink-0 text-red-500 text-sm font-medium hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg"
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        {/* Guest Details (Expandable) */}
+                        {expandedGuests.includes(i) && (
+                          <div className="px-6 py-4 space-y-4 bg-gray-50">
+                            {/* Personal Information Section */}
+                            <div>
+                              <h5 className="font-semibold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                                <User className="w-4 h-4" /> Personal Information
+                              </h5>
+                              <div className="grid grid-cols-2 gap-3 ml-6 text-sm">
+                                <div><span className="text-gray-600">Age:</span> <span className="font-medium">{g.age} years</span></div>
+                                <div><span className="text-gray-600">Gender:</span> <span className="font-medium">{g.gender}</span></div>
+                                <div className="col-span-2"><span className="text-gray-600">Relation:</span> <span className="font-medium">{g.relation}</span></div>
+                                <div className="col-span-2"><span className="text-gray-600">Mobile:</span> <span className="font-medium">{g.mobile}</span></div>
+                                <div className="col-span-2"><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{g.email}</span></div>
+                              </div>
+                            </div>
+
+                            {/* Travel Details Section */}
+                            {g.travelMode && (
+                              <div>
+                                <h5 className="font-semibold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                                  {g.travelMode === 'By Flight' ? <Plane className="w-4 h-4" /> : g.travelMode === 'By Train' ? <Train className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
+                                  Travel Details
+                                </h5>
+                                <div className="grid grid-cols-2 gap-3 ml-6 text-sm">
+                                  <div><span className="text-gray-600">Mode:</span> <span className="font-medium">{g.travelMode}</span></div>
+                                  {g.pnrNumber && <div><span className="text-gray-600">PNR Number:</span> <span className="font-medium">{g.pnrNumber}</span></div>}
+                                  {g.ticketFile && <div className="col-span-2"><span className="text-gray-600">Ticket:</span> <span className="font-medium text-green-600">✓ Uploaded</span></div>}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Government ID Section */}
+                            {g.govIdType && (
+                              <div>
+                                <h5 className="font-semibold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                                  <Briefcase className="w-4 h-4" /> Government ID
+                                </h5>
+                                <div className="grid grid-cols-2 gap-3 ml-6 text-sm">
+                                  <div><span className="text-gray-600">ID Type:</span> <span className="font-medium">{g.govIdType}</span></div>
+                                  {g.govIdFile && <div className="col-span-2"><span className="text-gray-600">Proof:</span> <span className="font-medium text-green-600">✓ Uploaded</span></div>}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
 
                 <div className="border border-dashed border-gray-300 rounded-3xl p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" placeholder="Guest Name" value={newGuest.name} onChange={e => setNewGuest(g => ({...g, name: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
-                    <input type="number" placeholder="Age" value={newGuest.age || ''} onChange={e => setNewGuest(g => ({...g, age: parseInt(e.target.value) || 0}))} className="px-5 py-4 border rounded-2xl" />
-                    <select value={newGuest.gender} onChange={e => setNewGuest(g => ({...g, gender: e.target.value as any}))} className="px-5 py-4 border rounded-2xl">
-                      <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
-                    </select>
-                    <input type="text" placeholder="Relation (Wife, Son, Friend...)" value={newGuest.relation} onChange={e => setNewGuest(g => ({...g, relation: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                  <h4 className="font-semibold text-lg mb-6">Enter Guest Details</h4>
+                  
+                  {/* Basic Info */}
+                  <div className="mb-6">
+                    <h5 className="text-sm font-medium text-gray-600 mb-4">Basic Information</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input type="text" placeholder="Guest Name *" value={newGuest.name} onChange={e => setNewGuest(g => ({...g, name: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                      <input type="number" placeholder="Age" value={newGuest.age || ''} onChange={e => setNewGuest(g => ({...g, age: parseInt(e.target.value) || 0}))} className="px-5 py-4 border rounded-2xl" />
+                      <select value={newGuest.gender} onChange={e => setNewGuest(g => ({...g, gender: e.target.value as 'Male' | 'Female' | 'Other'}))} className="px-5 py-4 border rounded-2xl">
+                        <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                      </select>
+                      <input type="text" placeholder="Relation (Wife, Son, Friend...) *" value={newGuest.relation} onChange={e => setNewGuest(g => ({...g, relation: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                    </div>
                   </div>
-                  <button type="button" onClick={addAdditionalGuest} className="mt-6 w-full py-3.5 bg-gray-900 text-white rounded-2xl font-medium flex items-center justify-center gap-2">
+
+                  {/* Contact Info */}
+                  <div className="mb-6">
+                    <h5 className="text-sm font-medium text-gray-600 mb-4">Contact Information</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input type="tel" placeholder="Mobile Number *" value={newGuest.mobile} onChange={e => setNewGuest(g => ({...g, mobile: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                      <input type="email" placeholder="Email Address *" value={newGuest.email} onChange={e => setNewGuest(g => ({...g, email: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                    </div>
+                  </div>
+
+                  {/* Travel Info */}
+                  <div className="mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-200">
+                    <h5 className="text-sm font-medium text-gray-600 mb-4">Travel Details (Optional)</h5>
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Mode of Travel</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {TRAVEL_MODES.map(mode => (
+                          <button key={mode} type="button" onClick={() => setNewGuest(g => ({...g, travelMode: mode}))}
+                            className={`py-2 px-3 text-sm rounded-xl border transition-all ${newGuest.travelMode === mode ? 'border-blue-500 bg-white font-medium' : 'border-gray-300 hover:border-gray-400'}`}>
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {newGuest.travelMode === 'By Flight' && (
+                      <div className="bg-white p-4 rounded-xl border border-gray-200">
+                        <input type="text" placeholder="Flight PNR Number" value={newGuest.pnrNumber} onChange={e => setNewGuest(g => ({...g, pnrNumber: e.target.value}))} className="w-full px-3 py-2 border rounded-lg mb-3 text-sm" />
+                        <label className="block text-xs font-medium mb-2">Upload Ticket</label>
+                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400">
+                          <Upload className="w-5 h-5 text-gray-400" />
+                          <span className="text-xs mt-1">Upload</span>
+                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, ticketFile: e.target.files?.[0] || null}))} />
+                        </label>
+                        {newGuest.ticketFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.ticketFile.name}</p>}
+                      </div>
+                    )}
+
+                    {newGuest.travelMode === 'By Train' && (
+                      <div className="bg-white p-4 rounded-xl border border-gray-200">
+                        <input type="text" placeholder="Train PNR Number" value={newGuest.pnrNumber} onChange={e => setNewGuest(g => ({...g, pnrNumber: e.target.value}))} className="w-full px-3 py-2 border rounded-lg mb-3 text-sm" />
+                        <label className="block text-xs font-medium mb-2">Upload Ticket</label>
+                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400">
+                          <Upload className="w-5 h-5 text-gray-400" />
+                          <span className="text-xs mt-1">Upload</span>
+                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, ticketFile: e.target.files?.[0] || null}))} />
+                        </label>
+                        {newGuest.ticketFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.ticketFile.name}</p>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Government ID */}
+                  <div className="mb-6 p-4 bg-orange-50 rounded-2xl border border-orange-200">
+                    <h5 className="text-sm font-medium text-gray-600 mb-4">Government ID Proof (Optional)</h5>
+                    <select value={newGuest.govIdType} onChange={e => setNewGuest(g => ({...g, govIdType: e.target.value}))} className="w-full px-4 py-2 border rounded-lg text-sm mb-3">
+                      <option value="">Select ID Type</option>
+                      {ID_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                    {newGuest.govIdType && (
+                      <div>
+                        <label className="block text-xs font-medium mb-2">Upload ID Proof</label>
+                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-orange-400">
+                          <Upload className="w-5 h-5 text-gray-400" />
+                          <span className="text-xs mt-1">Upload</span>
+                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, govIdFile: e.target.files?.[0] || null}))} />
+                        </label>
+                        {newGuest.govIdFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.govIdFile.name}</p>}
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="button" onClick={addAdditionalGuest} className="w-full py-3.5 bg-gray-900 text-white rounded-2xl font-medium flex items-center justify-center gap-2 hover:bg-gray-800">
                     <Plus className="w-5 h-5" /> Add Guest
                   </button>
                 </div>
@@ -358,50 +696,8 @@ export default function RSVPForm() {
             </div>
           )}
 
-          {/* STEP 4: Travel Details */}
+          {/* STEP 4: Confirmation */}
           {step === 4 && (
-            <div className="space-y-10">
-              <h2 className="text-2xl font-bold">Share your Travel Details</h2>
-              <div>
-                <label className="block text-sm font-medium mb-4">Mode of Travel</label>
-                <div className="grid grid-cols-3 gap-4">
-                  {TRAVEL_MODES.map(mode => (
-                    <button key={mode} type="button" onClick={() => updateForm('travelMode', mode)}
-                      className={`py-6 rounded-2xl border-2 font-medium transition-all ${formData.travelMode === mode ? 'border-rose-500 bg-rose-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {formData.travelMode === 'By Flight' && (
-                <div className="bg-gray-50 p-8 rounded-3xl">
-                  <label className="block text-sm font-medium mb-3">Upload Flight Ticket</label>
-                  <label className="border-2 border-dashed border-gray-300 rounded-2xl p-10 flex flex-col items-center cursor-pointer hover:border-rose-400">
-                    <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                    <span className="font-medium">Click to upload Flight Ticket</span>
-                    <input type="file" className="hidden" onChange={(e) => updateForm('flightTicket', e.target.files?.[0] || null)} />
-                  </label>
-                  {formData.flightTicket && <p className="text-green-600 text-sm mt-3">✓ {formData.flightTicket.name}</p>}
-                </div>
-              )}
-
-              {formData.travelMode === 'By Train' && (
-                <div className="bg-gray-50 p-8 rounded-3xl">
-                  <label className="block text-sm font-medium mb-3">Upload Train Ticket</label>
-                  <label className="border-2 border-dashed border-gray-300 rounded-2xl p-10 flex flex-col items-center cursor-pointer hover:border-rose-400">
-                    <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                    <span className="font-medium">Click to upload Train Ticket</span>
-                    <input type="file" className="hidden" onChange={(e) => updateForm('trainTicket', e.target.files?.[0] || null)} />
-                  </label>
-                  {formData.trainTicket && <p className="text-green-600 text-sm mt-3">✓ {formData.trainTicket.name}</p>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STEP 5: Confirmation */}
-          {step === 5 && (
             <div className="max-w-lg mx-auto text-center space-y-8">
               <h2 className="text-3xl font-bold">Final Confirmation</h2>
               <div className="space-y-6 text-left">
@@ -411,7 +707,7 @@ export default function RSVPForm() {
                 </label>
                 <label className="flex gap-4 cursor-pointer">
                   <input type="checkbox" checked={formData.dataConsent} onChange={e => updateForm('dataConsent', e.target.checked)} className="mt-1 accent-rose-500 w-5 h-5" />
-                  <span className="text-sm">I consent to my data being used for wedding planning purposes only.</span>
+                  <span className="text-sm">I consent to my data being used for wedding planning purposes only*.</span>
                 </label>
               </div>
             </div>
@@ -419,7 +715,7 @@ export default function RSVPForm() {
 
           <div className="flex justify-between mt-16 pt-8 border-t">
             {step > 1 && <button type="button" onClick={prevStep} className="px-8 py-3 text-gray-600 hover:bg-gray-100 rounded-2xl">← Previous</button>}
-            {step < 5 ? (
+            {step < 4 ? (
               <button type="button" onClick={nextStep} className="ml-auto px-10 py-3.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-2xl font-semibold">Continue →</button>
             ) : (
               <button type="submit" className="ml-auto px-12 py-4 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-bold text-lg rounded-2xl">Submit My RSVP 💖</button>
