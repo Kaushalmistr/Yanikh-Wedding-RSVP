@@ -4,7 +4,9 @@ import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import CreateEvent from './pages/CreateEvent';
 import EventDetail from './pages/EventDetail';
+import GuestList from './pages/GuestList';
 import RSVPForm from './pages/RSVPForm';
+import BulkMessaging from './pages/BulkMessaging';
 import { type ReactNode } from 'react';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -49,6 +51,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <EventDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/guests/:id"
+        element={
+          <ProtectedRoute>
+            <GuestList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/messaging/:id"
+        element={
+          <ProtectedRoute>
+            <BulkMessaging />
           </ProtectedRoute>
         }
       />
