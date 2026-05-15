@@ -106,16 +106,18 @@ export default function EventDetail() {
         {!showGuestListTable ? (
         <div className="w-full px-12 pb-20">
           <div className="grid grid-cols-3 gap-6 max-w-7xl mx-auto">
-          {featureCards.map((feature, idx) => {
+            {featureCards.map((feature, idx) => {
             const Icon = feature.icon;
             return (
               <div
                 key={idx}
                 onClick={() => {
                   if (feature.label === 'Guest List') {
-                    setShowGuestListTable(true);
+                    navigate(`/guests/${id}`);
                   } else if (feature.label === 'RSVP') {
                     navigate(`/rsvp/${id}`);
+                  } else if (feature.label === 'Messaging') {
+                    navigate(`/messaging/${id}`);
                   }
                 }}
                 className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl border border-gray-100 hover:shadow-xl transition-all cursor-pointer min-h-[250px]"

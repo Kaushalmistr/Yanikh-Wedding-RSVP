@@ -94,8 +94,11 @@ export interface Guest {
   additionalNotes: string;
   infoAccurate: boolean;
   dataConsent: boolean;
-  
+
   submittedAt: string;
+
+  // Source Indicator
+  uploadSource?: 'RSVP' | 'BulkUpload';
 }
 
 export interface WeddingEvent {
@@ -109,6 +112,38 @@ export interface WeddingEvent {
   coverImage: string; // base64 or URL
   createdBy: string; // user id
   createdAt: string;
+}
+
+export interface BulkMessage {
+  id: string;
+  eventId: string;
+  title: string;
+  content: string;
+  selectedFunctions: string[]; // e.g., ['Mehendi', 'Haldi']
+  createdBy: string; // user id
+  createdAt: string;
+  sentAt?: string; // null until message is sent
+  totalRecipients?: number; // count of guests who will receive this message
+  recipientGuestIds?: string[]; // IDs of guests who received this message
+  isAutoSent?: boolean; // Whether message was auto-sent from guest list upload
+  uploadedGuestListId?: string; // Reference to uploaded guest list
+}
+
+export interface UploadedGuestList {
+  id: string;
+  eventId: string;
+  fileName: string;
+  uploadedAt: string;
+  processedGuests: number;
+  messagesSent: number;
+  guestData: Array<{
+    guestName: string;
+    email?: string;
+    mobile?: string;
+    attendingEvents: string[]; // Events/functions they're attending
+    guestId?: string; // ID if guest exists in system
+  }>;
+  createdBy: string;
 }
 
 // Helper functions
@@ -225,6 +260,164 @@ export function addGuestsBulk(guestList: Omit<Guest, 'id' | 'submittedAt'>[]): G
   guests.push(...newGuests);
   setItem('wedding_guests', guests);
   return newGuests;
+}
+
+/**
+ * Convert parsed guest data from CSV/Excel file into Guest objects
+ * Maps ParsedGuestData format to Guest database format
+ */
+export function convertParsedGuestToGuest(
+  parsedGuests: any[], // ParsedGuestData[]
+  eventId: string
+): Omit<Guest, 'id' | 'submittedAt'>[] {
+  return parsedGuests.map((parsed) => {
+    // Convert attendingEvents array to functionAttendance record
+    const functionAttendance: Record<string, 'Yes' | 'No'> = {
+      'Welcome Lunch': 'No',
+      'Mehendi': 'No',
+      'Sangeet': 'No',
+      'Haldi': 'No',
+      'Wedding Ceremony': 'No',
+      'Reception': 'No',
+      'Farewell Brunch': 'No',
+    };
+
+    // Mark events as 'Yes' if guest is attending
+    if (parsed.attendingEvents && Array.isArray(parsed.attendingEvents)) {
+      parsed.attendingEvents.forEach((event: string) => {
+        if (functionAttendance.hasOwnProperty(event)) {
+          functionAttendance[event] = 'Yes';
+        }
+      });
+    }
+
+    return {
+      eventId,
+      name: parsed.guestName || '',
+      mobile: parsed.mobile || '',
+      email: parsed.email || '',
+      city: '',
+      respondingFor: 'Self',
+      attendanceStatus: 'Maybe',
+      functionAttendance,
+      adults: 0,
+      children: 0,
+      infants: 0,
+      additionalGuests: [],
+      needsAccommodation: false,
+      needsPickup: false,
+      needsDrop: false,
+      transferPassengers: 0,
+      transferBags: 0,
+      mealPreference: '',
+      dietaryRestrictions: '',
+      specialAssistance: [],
+      celebrationParticipation: [],
+      additionalNotes: '',
+      infoAccurate: true,
+      dataConsent: true,
+      uploadSource: 'BulkUpload',
+    };
+  });
+}
+
+// Bulk Message functions
+export function getMessages(): BulkMessage[] {
+  return getItem<BulkMessage[]>('wedding_messages', []);
+}
+
+export function getMessagesByEvent(eventId: string): BulkMessage[] {
+  return getMessages().filter(m => m.eventId === eventId);
+}
+
+export function createMessage(message: Omit<BulkMessage, 'id' | 'createdAt'>): BulkMessage {
+  const messages = getMessages();
+  const newMessage: BulkMessage = {
+    ...message,
+    id: uuidv4(),
+    createdAt: new Date().toISOString(),
+  };
+  messages.push(newMessage);
+  setItem('wedding_messages', messages);
+  return newMessage;
+}
+
+export function updateMessage(id: string, updates: Partial<BulkMessage>): BulkMessage | null {
+  const messages = getMessages();
+  const index = messages.findIndex(m => m.id === id);
+  if (index === -1) return null;
+  
+  messages[index] = { ...messages[index], ...updates };
+  setItem('wedding_messages', messages);
+  return messages[index];
+}
+
+export function sendMessage(messageId: string): BulkMessage | null {
+  return updateMessage(messageId, { sentAt: new Date().toISOString() });
+}
+
+export function deleteMessage(id: string): void {
+  const messages = getMessages().filter(m => m.id !== id);
+  setItem('wedding_messages', messages);
+}
+
+// Get guests who will receive a message based on selected functions
+export function getRecipientsForMessage(eventId: string, selectedFunctions: string[]): Guest[] {
+  const guests = getGuestsByEvent(eventId);
+  
+  // Filter guests who are attending at least one of the selected functions
+  return guests.filter(guest => {
+    return selectedFunctions.some(func => guest.functionAttendance[func] === 'Yes');
+  });
+}
+
+// Guest List Upload functions
+export function getUploadedGuestLists(): UploadedGuestList[] {
+  return getItem<UploadedGuestList[]>('wedding_uploaded_guest_lists', []);
+}
+
+export function getUploadedGuestListsByEvent(eventId: string): UploadedGuestList[] {
+  return getUploadedGuestLists().filter(u => u.eventId === eventId);
+}
+
+export function createUploadedGuestList(uploadedList: Omit<UploadedGuestList, 'id'>): UploadedGuestList {
+  const lists = getUploadedGuestLists();
+  const newList: UploadedGuestList = {
+    ...uploadedList,
+    id: uuidv4(),
+  };
+  lists.push(newList);
+  setItem('wedding_uploaded_guest_lists', lists);
+  return newList;
+}
+
+export function deleteUploadedGuestList(id: string): void {
+  const lists = getUploadedGuestLists().filter(u => u.id !== id);
+  setItem('wedding_uploaded_guest_lists', lists);
+}
+
+// Find guest by name or email to match with uploaded list
+export function findGuestByNameOrEmail(eventId: string, name: string, email?: string): Guest | undefined {
+  const guests = getGuestsByEvent(eventId);
+  
+  // First try exact name match (case-insensitive)
+  let found = guests.find(g => g.name.toLowerCase() === name.toLowerCase());
+  if (found) return found;
+  
+  // Then try email match if provided
+  if (email) {
+    found = guests.find(g => g.email.toLowerCase() === email.toLowerCase());
+    if (found) return found;
+  }
+  
+  // Finally try partial name match
+  const nameLower = name.toLowerCase();
+  found = guests.find(g => 
+    g.name.toLowerCase().includes(nameLower) || 
+    nameLower.includes(g.name.toLowerCase())
+  );
+  
+  return found;
 }
 
 // Auth session

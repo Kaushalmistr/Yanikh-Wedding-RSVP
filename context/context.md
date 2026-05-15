@@ -46,13 +46,16 @@
 │   ├── lib/
 │   │   ├── constants.ts         # App-wide constants
 │   │   ├── db.ts                # Database layer (localStorage CRUD)
+│   │   ├── guestListParser.ts   # Excel/CSV file parsing and event detection
 │   │   └── supabase.ts          # Placeholder for Supabase
 │   ├── pages/
 │   │   ├── AuthPage.tsx         # Login/Signup page
 │   │   ├── Dashboard.tsx        # Events list & management
 │   │   ├── CreateEvent.tsx      # Create new wedding event
 │   │   ├── EventDetail.tsx      # Event details & guest list view
-│   │   └── RSVPForm.tsx         # Multi-step RSVP form
+│   │   ├── GuestList.tsx        # Full guest list table view
+│   │   ├── RSVPForm.tsx         # Multi-step RSVP form
+│   │   └── BulkMessaging.tsx    # Bulk messaging & auto-send features
 │   ├── utils/
 │   │   └── cn.ts                # Tailwind class utilities
 ├── public/
@@ -167,18 +170,42 @@ interface Guest {
   submittedAt: string;
 }
 ```
-  
-  // Food & Preferences
-  mealPreference: string;
-  dietaryRestrictions: string;
-  specialAssistance: string[];
-  celebrationParticipation: string[];
-  
-  // Metadata
-  additionalNotes: string;
-  infoAccurate: boolean;
-  dataConsent: boolean;
-  submittedAt: string;
+
+### Bulk Message
+```typescript
+interface BulkMessage {
+  id: string;
+  eventId: string;
+  title: string;                    // Message subject/title
+  content: string;                  // Full message content
+  selectedFunctions: string[];      // e.g., ['Mehendi', 'Haldi', 'Wedding Ceremony']
+  createdBy: string;               // Admin/creator user id
+  createdAt: string;               // When message was created
+  sentAt?: string;                 // When message was sent (null if draft)
+  totalRecipients?: number;        // Count of guests receiving this message
+  recipientGuestIds?: string[];    // IDs of guests who received this message
+  isAutoSent?: boolean;            // Whether message was auto-sent from guest list upload
+  uploadedGuestListId?: string;    // Reference to uploaded guest list
+}
+```
+
+### Uploaded Guest List
+```typescript
+interface UploadedGuestList {
+  id: string;
+  eventId: string;
+  fileName: string;                // Name of uploaded file
+  uploadedAt: string;              // When file was uploaded
+  processedGuests: number;         // Total guests processed
+  messagesSent: number;            // Total messages sent
+  guestData: Array<{
+    guestName: string;             // Guest's name
+    email?: string;                // Guest's email (optional)
+    mobile?: string;               // Guest's mobile (optional)
+    attendingEvents: string[];     // Events/functions they're attending
+    guestId?: string;              // ID if guest matched in system
+  }>;
+  createdBy: string;              // Who uploaded the list
 }
 ```
 
@@ -293,7 +320,7 @@ Display Feature Cards Grid:
 ├─ Stationery
 ├─ RSVP         ← Opens RSVPForm when clicked
 ├─ Photo Moments
-└─ Messaging
+└─ Messaging    ← Opens BulkMessaging when clicked
 ```
 
 ### RSVP Form Flow (4 Steps)
@@ -369,6 +396,68 @@ showGuestListTable = false
 Return to feature cards grid
 ```
 
+### Bulk Messaging Flow
+```
+EventDetail Page → Click "Messaging" card
+    ↓
+BulkMessaging page loads
+    ↓
+Three tabs available:
+├─ Compose Message (default)
+├─ Upload & Auto-Send
+└─ Message History
+
+Compose Message Tab:
+├─ Enter Message Title
+├─ Enter Message Content
+├─ Select Target Events/Functions:
+│  ├─ Welcome Lunch
+│  ├─ Mehendi
+│  ├─ Sangeet
+│  ├─ Haldi
+│  ├─ Wedding Ceremony
+│  ├─ Reception
+│  └─ Farewell Brunch
+├─ Preview panel shows:
+│  ├─ Message preview
+│  ├─ Selected functions
+│  └─ Number of recipients (guests attending selected functions)
+├─ Actions:
+│  ├─ "Save as Draft" → Save message for later sending
+│  └─ "Send Now" → Save and send immediately
+    ↓
+Upload & Auto-Send Tab:
+├─ Download CSV Template
+├─ Upload Excel/CSV file with guest data
+├─ System auto-detects attending events from file columns
+├─ Displays detected guests with their attending events
+├─ Auto-detect logic:
+│  ├─ Looks for standard event columns (Yes/No format)
+│  ├─ Supports event name variations (Mehndi, Mehendi, Haldi, etc.)
+│  ├─ Can detect from free-text "Events" or "Notes" columns
+│  ├─ Matches guests by name first, then by email
+└─ Actions:
+   ├─ "Clear & Start Over" → Reset and upload different file
+   └─ "Auto-Send Messages Now" → Create and send personalized messages
+
+Auto-Send Process:
+├─ For each detected guest:
+│  ├─ Match to existing guest by name or email
+│  ├─ If matched AND has attending events:
+│  │  ├─ Create message with detected events in title
+│  │  ├─ Auto-populate message content
+│  │  ├─ Mark as auto-sent
+│  │  └─ Record recipient guest ID
+│  └─ Move to next guest
+├─ Show progress bar with completion percentage
+├─ Display summary: "Sent X messages to Y guests"
+└─ Save upload history for reference
+
+Message History Tab:
+├─ Sent Messages Section
+└─ Drafts Section (with send/delete options)
+```
+
 ---
 
 ## Key Features
@@ -398,7 +487,28 @@ Return to feature cards grid
 - Dietary restrictions & special assistance
 - Data consent management
 
-### 4. Guest Management
+### 4. Bulk Messaging
+- Send event-specific messages to guests
+- Filter recipients by event functions (Mehendi, Sangeet, Haldi, etc.)
+- Automatic recipient calculation based on guest attendance
+- Compose messages with title and content
+- Save messages as drafts before sending
+- Track sent messages and delivery history
+- Preview how many guests will receive each message
+- Only guests attending selected functions receive relevant messages
+
+### 5. Auto-Detect Guest Lists & Auto-Send Messages
+- Upload Excel or CSV files with guest data
+- Auto-detect which events each guest is attending
+- Intelligent event name matching (supports variations like "Mehndi", "Haldi", "Wedding Ceremony", etc.)
+- Automatically match guests by name or email
+- Create event-specific messages per guest automatically
+- Send personalized messages based on detected attendance
+- Each guest receives messages only for events they're attending
+- Track upload history with processing statistics
+- Download CSV template for proper file format
+
+### 6. Guest Management
 - View all RSVPs for an event
 - Full-width guest list table
 - Export guest data to Excel (.xlsx)
@@ -406,7 +516,7 @@ Return to feature cards grid
 - Filter by various criteria
 - Track guest count statistics
 
-### 5. Data Export
+### 7. Data Export
 - Export guest list to Excel format
 - Includes all guest information
 - Formatted spreadsheet with proper headers
@@ -477,8 +587,70 @@ AuthContext
 - `getGuests()` - Get all guests across events
 - `searchGuests(query)` - Search guests by name
 
+### Bulk Message Operations
+- `createMessage(message)` - Create new draft or send message
+- `getMessages()` - Get all messages across events
+- `getMessagesByEvent(eventId)` - Get messages for specific event
+- `updateMessage(id, updates)` - Update message details
+- `sendMessage(messageId)` - Mark message as sent
+- `deleteMessage(id)` - Remove message
+- `getRecipientsForMessage(eventId, selectedFunctions)` - Calculate guests receiving message based on function attendance
+
+### Uploaded Guest List Operations
+- `createUploadedGuestList(list)` - Save uploaded guest list metadata
+- `getUploadedGuestLists()` - Get all uploaded lists
+- `getUploadedGuestListsByEvent(eventId)` - Get lists for specific event
+- `deleteUploadedGuestList(id)` - Remove upload record
+- `findGuestByNameOrEmail(eventId, name, email)` - Match guest in system by name or email
+  - First tries exact name match (case-insensitive)
+  - Then tries email match if provided
+  - Finally tries partial name match
+  - Returns matching guest or undefined
+
+### Guest List File Parsing
+- `parseGuestListFile(file)` - Parse Excel/CSV file and extract guest data with flexible column matching
+- `normalizeEventName(name)` - Convert event aliases to standard names
+- `generateSampleGuestListCSV()` - Generate downloadable CSV template
+
+#### Flexible Column Detection
+The parser intelligently detects common column variations:
+
+**Guest Name Columns:**
+- Exact matches: "Name", "Guest Name", "Full Name", "Guest"
+- Case-insensitive and partial matches: Any column containing "name" or "guest"
+
+**Email Columns:**
+- Exact matches: "Email", "E-mail", "Email Address"
+- Case-insensitive partial matches: Any column containing "email"
+
+**Mobile/Contact Columns:**
+- Exact matches: "Mobile", "Phone", "Contact", "Mobile Number", "Contact No", "Contact Number", "Phone Number"
+- Case-insensitive partial matches: Any column containing "contact", "mobile", or "phone"
+
+**Event Attendance Columns:**
+- Supports dedicated event columns with Yes/No values (recommended)
+- Recognizes event variations: "Wedding" → "Wedding Ceremony", "Mehendi" → "Mehendi", etc.
+- Case-insensitive column name matching
+- Falls back to free-text detection in "Events", "Notes", "Functions", "Attending" columns
+
+#### Event Name Recognition
+The system recognizes event variations:
+- **Mehendi variations**: "mehendi", "mehndi", "henna"
+- **Sangeet variations**: "sangeet", "songs", "music"
+- **Haldi variations**: "haldi", "turmeric"
+- **Wedding variations**: "wedding", "ceremony", "main event" → "Wedding Ceremony"
+- **Reception variations**: "reception", "dinner", "party"
+- **Farewell variations**: "farewell", "brunch", "goodbye" → "Farewell Brunch"
+- **Welcome variations**: "welcome", "lunch", "arrival" → "Welcome Lunch"
+
+Supported file formats for detection:
+- Event columns with Yes/No values (recommended format)
+- Free-text "Events" or "Notes" columns with event keywords
+- Case-insensitive matching
+- Handles missing or empty columns gracefully
+
 ### Data Storage
-- **Key Format:** `wedding_rsvp_users`, `wedding_rsvp_events`, `wedding_rsvp_guests`
+- **Key Format:** `wedding_users`, `wedding_events`, `wedding_guests`, `wedding_messages`
 - **Format:** JSON stringification in localStorage
 - **Persistence:** Browser localStorage (max ~5-10MB)
 
@@ -492,7 +664,9 @@ AuthContext
 | `/dashboard` | Dashboard | Yes | Event list & management |
 | `/create-event` | CreateEvent | Yes | Create new wedding event |
 | `/event/:id` | EventDetail | Yes | Event details, feature cards, guest list |
+| `/guests/:id` | GuestList | Yes | Full guest list table view |
 | `/rsvp/:id` | RSVPForm | Yes | Submit RSVP response |
+| `/messaging/:id` | BulkMessaging | Yes | Compose and send bulk messages to guests |
 | `*` | Navigate to `/` | - | Catch-all redirect |
 
 ---
@@ -599,6 +773,93 @@ AuthContext
 
 ---
 
+## Auto-Detection & Auto-Send Feature
+
+### How Auto-Detection Works
+
+The system automatically detects which events guests are attending from uploaded Excel/CSV files:
+
+#### File Parsing Process
+1. **Upload File** - Admin uploads Excel or CSV file with guest data
+2. **Extract Guest Info** - Parser intelligently extracts:
+   - Guest name (from any column containing "name" or "guest", case-insensitive)
+   - Email (from any column containing "email", case-insensitive)
+   - Mobile (from columns like "Mobile", "Contact No", "Phone", or any containing "contact"/"mobile"/"phone")
+   - Event attendance (from dedicated columns OR free-text "Events"/"Notes" columns)
+
+3. **Event Detection** - System uses a 3-step approach:
+   - **Step 1 - Exact Column Match**: Looks for dedicated event columns (e.g., "Mehendi", "Wedding", "Sangeet") with Yes/No values
+   - **Step 2 - Flexible Column Names**: If Step 1 finds no events, scans all columns with Yes/No values and maps event keywords (e.g., "wedding" → "Wedding Ceremony")
+   - **Step 3 - Free-Text Detection**: If still no events found, searches "Events", "Notes", "Functions", "Attending" columns for event keywords
+
+#### Event Name Variations Supported
+- Mehendi: "mehendi", "mehndi", "henna"
+- Sangeet: "sangeet", "songs", "music"
+- Haldi: "haldi", "turmeric"
+- Wedding: "wedding", "ceremony", "main event"
+- Reception: "reception", "dinner", "party"
+- Farewell: "farewell", "brunch", "goodbye"
+- Welcome: "welcome", "lunch", "arrival"
+
+#### Guest Matching
+After parsing, the system matches detected guests to your RSVP database:
+1. **Exact Name Match** - Case-insensitive exact name comparison
+2. **Email Match** - If exact name fails, tries email matching
+3. **Partial Match** - If both fail, tries partial name matching
+4. Only matched guests receive auto-sent messages
+
+#### Message Creation & Sending
+For each matched guest with detected events:
+1. Creates a personalized message title including their events
+2. Auto-populates message content addressing the guest
+3. Marks message as auto-sent (traceable)
+4. Records guest ID as recipient
+5. Sends immediately to that specific guest
+
+#### Upload History
+- All uploads are tracked with metadata
+- Shows: guest count, messages sent, upload date
+- Can be deleted from history
+- Helps audit messaging activity
+
+### CSV Template Format
+
+The recommended formats include:
+
+**Format 1: Dedicated Event Columns with Yes/No**
+```
+Name, Email, Contact No, Mehendi, Sangeet, Haldi, Wedding, Reception, Farewell Brunch
+Kaushal Mistry, kaushal@example.com, 9876543210, No, No, Yes, Yes, Yes, Yes
+Ankita Mistry, ankita@example.com, 9876543211, No, No, No, Yes, No, No
+Priya Singh, priya@example.com, 9876543212, Yes, Yes, Yes, Yes, Yes, No
+```
+
+**Format 2: Free-Text Event Column**
+```
+Name, Email, Contact Number, Events
+Kaushal Mistry, kaushal@example.com, 9876543210, Haldi, Wedding, Reception
+Ankita Mistry, ankita@example.com, 9876543211, Wedding Ceremony
+Priya Singh, priya@example.com, 9876543212, Mehendi, Sangeet, Haldi, Wedding, Reception
+```
+
+**Format 3: Flexible Column Names**
+```
+Guest Name, Contact No, Mobile, Mehendi, Wedding, Reception, Notes
+Kaushal Mistry, 9876543210, , No, Yes, Yes, Attending with family
+Ankita Mistry, , 9876543211, No, Yes, No, Cannot attend Mehendi
+```
+
+**Key Points:**
+- Column names are flexible and case-insensitive
+- "Contact No", "Mobile", "Phone" are all recognized for contact information
+- Event columns can use short names ("Wedding", "Mehendi") or full names ("Wedding Ceremony", "Mehendi")
+- Yes/No values (case-insensitive) indicate attendance: "Yes", "Y", "1", "true"
+- Missing columns are handled gracefully
+- The parser continues even if some guests lack email or mobile data
+- At least the guest name must be present for a guest to be imported
+
+---
+
 ## Deployment
 
 ### Build
@@ -638,11 +899,14 @@ npm run preview
 |------|---------|
 | `AuthContext.tsx` | Global authentication state |
 | `db.ts` | localStorage CRUD operations |
+| `guestListParser.ts` | Parse Excel/CSV files and detect event attendance |
 | `App.tsx` | Route configuration & auth protection |
 | `Dashboard.tsx` | Event list & management interface |
 | `CreateEvent.tsx` | Event creation form |
 | `EventDetail.tsx` | Event details, feature cards, guest list |
+| `GuestList.tsx` | Full-width guest list table view |
 | `RSVPForm.tsx` | Multi-step RSVP collection form |
+| `BulkMessaging.tsx` | Bulk messaging and auto-send features |
 
 ---
 
@@ -704,6 +968,6 @@ TRAVEL_MODES = [
 
 ---
 
-**Last Updated:** May 10, 2026  
+**Last Updated:** May 15, 2026  
 **Maintainers:** [Project Team]  
 **Repository:** Yanikh-Wedding-RSVP
