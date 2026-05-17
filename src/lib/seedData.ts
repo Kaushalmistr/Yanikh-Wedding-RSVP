@@ -225,6 +225,14 @@ export function seedDummyData() {
         dataConsent: true,
         submittedAt: new Date(Date.now() - Math.random() * 30 * 86400000).toISOString(),
         uploadSource: Math.random() > 0.7 ? 'BulkUpload' : 'RSVP',
+        whatsappStatus: (() => {
+          const rand = Math.random();
+          if (rand > 0.7) return 'Success';
+          if (rand > 0.5) return 'Pending';
+          if (rand > 0.4) return 'Failed';
+          return 'Not Sent';
+        })(),
+        whatsappSentAt: Math.random() > 0.5 ? new Date(Date.now() - Math.random() * 10 * 86400000).toISOString() : undefined,
       });
     }
   });

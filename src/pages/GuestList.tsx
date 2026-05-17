@@ -372,16 +372,17 @@ export default function GuestList() {
               <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: '100%' }}>
                 <colgroup>
                   <col style={{ width: '4%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '16%' }} />
-                  <col style={{ width: '7%' }} />
-                  <col style={{ width: '7%' }} />
-                  <col style={{ width: '7%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '11%' }} />
                   <col style={{ width: '9%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
                   <col style={{ width: '8%' }} />
                 </colgroup>
                 <thead className="bg-gray-50 border-b-2 border-gray-200">
@@ -425,6 +426,9 @@ export default function GuestList() {
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Source
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                      WhatsApp Status
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Actions
@@ -512,6 +516,22 @@ export default function GuestList() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
+                            <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium whitespace-nowrap ${
+                              guest.whatsappStatus === 'Success'
+                                ? 'bg-green-100 text-green-700'
+                                : guest.whatsappStatus === 'Failed'
+                                ? 'bg-red-100 text-red-700'
+                                : guest.whatsappStatus === 'Pending'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {guest.whatsappStatus === 'Success' ? '✓ Sent' : 
+                               guest.whatsappStatus === 'Failed' ? '✗ Failed' :
+                               guest.whatsappStatus === 'Pending' ? '⏳ Pending' :
+                               '— Not Sent'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => openMessageModal(guest)}
@@ -542,7 +562,7 @@ export default function GuestList() {
                         {/* Expanded Details */}
                         {isExpanded && guest.additionalGuests && guest.additionalGuests.length > 0 && (
                           <tr className="bg-gray-50 border-b border-gray-100">
-                            <td colSpan={12} className="px-6 py-4">
+                            <td colSpan={13} className="px-6 py-4">
                               <div className="space-y-3">
                                 <h4 className="font-semibold text-gray-900 flex items-center gap-2">
                                   <Users className="w-4 h-4" /> Additional Guests ({guest.additionalGuests.length})
