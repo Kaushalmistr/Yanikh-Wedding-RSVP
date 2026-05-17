@@ -106,8 +106,9 @@ interface Guest {
   
   // Personal Details
   name: string;
-  mobile: string;
-  email: string;
+  countryCode: string;       // ISO country code (e.g., 'IN', 'US', 'GB')
+  mobile: string;            // Mobile number (digits only, validated per country)
+  email: string;             // Validated email format
   city: string;
   gender: 'Male' | 'Female' | 'Other';
   respondingFor: 'Self' | 'Couple' | 'Family';
@@ -118,10 +119,10 @@ interface Guest {
   
   // Personal Travel Details
   personalTravelMode: 'By Flight' | 'By Train' | 'Myself';
-  flightTicket?: File;      // For flight mode
-  flightPnr?: string;       // For flight mode
-  trainTicket?: File;       // For train mode
-  trainPnr?: string;        // For train mode
+  flightTicket?: File;      // Validated: Images (JPG, PNG, WEBP, GIF) + PDF only, max 5MB
+  flightPnr?: string;       // 6 alphanumeric characters (e.g., ABC123)
+  trainTicket?: File;       // Validated: Images (JPG, PNG, WEBP, GIF) + PDF only, max 5MB
+  trainPnr?: string;        // 10 numeric digits (e.g., 1234567890)
   
   // Guest Counts
   adults: number;
@@ -132,15 +133,17 @@ interface Guest {
     age: number;
     gender: 'Male' | 'Female' | 'Other';
     relation: string;
-    mobile: string;
-    email: string;
+    countryCode: string;     // ISO country code
+    mobile: string;          // Validated per country
+    email: string;           // Validated email format
     // Travel Details for each guest
     travelMode?: 'By Flight' | 'By Train' | 'Myself';
-    pnrNumber?: string;
-    ticketFile?: File;
+    pnrNumber?: string;      // Flight: 6 alphanumeric, Train: 10 digits
+    ticketFile?: File;       // Validated: Images + PDF only, max 5MB
     // Government ID Proof for each guest
     govIdType?: string;      // 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'
-    govIdFile?: File;
+    govIdNumber?: string;    // Validated per ID type
+    govIdFile?: File;        // Validated: Images + PDF only, max 5MB
   }>;
   
   // Accommodation
@@ -151,11 +154,11 @@ interface Guest {
   roomPreference?: string;
   preferredRoommates?: string;
   
-  // ID Proof (Main Guest)
-  idType?: string;
-  idNumber?: string;
-  idFront?: File;
-  idBack?: File;
+  // ID Proof (Main Guest) - Validated per type
+  idType?: string;           // 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'
+  idNumber?: string;         // Format validated based on idType
+  idFront?: File;            // Validated: Images + PDF only, max 5MB
+  idBack?: File;             // Validated: Images + PDF only, max 5MB
   
   // Food & Preferences
   mealPreference: string;
@@ -329,17 +332,63 @@ RSVP Button Click
     ↓
 Step 1: Personal Details & Travel Information
 ├─ Personal Info:
-│  ├─ Name, Gender, Mobile, Email
+│  ├─ Name (required)
+│  ├─ Gender (Male/Female/Other)
+│  ├─ Country Code Selector (14 countries with flags)
+│  │  └─ Validates mobile per country:
+│  │     ├─ India: 10 digits
+│  │     ├─ US/Canada: 10 digits
+│  │     ├─ UK: 10 digits
+│  │     ├─ Australia/UAE/NZ/SA: 9 digits
+│  │     ├─ Singapore: 8 digits
+│  │     ├─ Germany: 11 digits
+│  │     └─ France/Spain: 9 digits
+│  ├─ Mobile Number (country-specific validation)
+│  │  ├─ Real-time digit-only filtering
+│  │  ├─ Auto-truncate when country changes
+│  │  ├─ Visual feedback: green (valid), red (invalid)
+│  │  └─ Error message if invalid
+│  ├─ Email Address (validated format)
+│  │  ├─ Proper format check (name@domain.com)
+│  │  ├─ Domain validation
+│  │  ├─ No consecutive/leading/trailing dots
+│  │  └─ Visual feedback on validation
 │  ├─ City of Residence
-│  ├─ Government ID Proof (Type, Number, Front/Back images)
+│  ├─ Government ID Proof:
+│  │  ├─ ID Type Selector (Aadhaar/Passport/DL/Voter ID)
+│  │  ├─ ID Number (format validated per type):
+│  │  │  ├─ Aadhaar: 12 digits, no 0/1 start
+│  │  │  ├─ Passport: 1 letter + 7 digits
+│  │  │  ├─ Driving License: 2 letters + 13 digits
+│  │  │  └─ Voter ID: 3 letters + 7 digits
+│  │  └─ Upload Front/Back Images:
+│  │     ├─ File type validation (Images + PDF only)
+│  │     ├─ Max 5MB size check
+│  │     ├─ Upload success preview:
+│  │     │  ├─ File icon with name
+│  │     │  ├─ File size display
+│  │     │  ├─ Success checkmark
+│  │     │  └─ Remove button
+│  │     └─ Error if invalid type/size
 ├─ Travel Details:
 │  ├─ Mode of Travel (By Flight / By Train / Myself)
 │  ├─ If Flight:
-│  │  ├─ Flight PNR Number
-│  │  └─ Upload Flight Ticket
+│  │  ├─ Flight PNR Number (6 alphanumeric):
+│  │  │  ├─ Real-time uppercase conversion
+│  │  │  ├─ Character filtering (alphanumeric only)
+│  │  │  ├─ Max 6 characters enforced
+│  │  │  └─ Visual validation feedback
+│  │  └─ Upload Flight Ticket:
+│  │     ├─ File validation (Images + PDF, 5MB max)
+│  │     └─ Upload preview with file details
 │  └─ If Train:
-│     ├─ Train PNR Number
-│     └─ Upload Train Ticket
+│     ├─ Train PNR Number (10 digits):
+│     │  ├─ Real-time digit filtering
+│     │  ├─ Max 10 digits enforced
+│     │  └─ Visual validation feedback
+│     └─ Upload Train Ticket:
+│        ├─ File validation (Images + PDF, 5MB max)
+│        └─ Upload preview with file details
     ↓
 Step 2: Attendance & Functions
 ├─ Main attendance status (Yes/Maybe/Cannot attend)
@@ -349,14 +398,22 @@ Step 3: Add Guests (Hierarchical Tree Format)
 ├─ List main guest (auto-counted)
 ├─ Add additional guests with:
 │  ├─ Basic info (Name, Age, Gender, Relation)
-│  ├─ Contact (Mobile, Email)
+│  ├─ Contact:
+│  │  ├─ Country Code (same validation as main)
+│  │  ├─ Mobile (validated per country)
+│  │  └─ Email (format validated)
 │  ├─ Travel Details:
 │  │  ├─ Mode (By Flight / By Train / Myself)
-│  │  ├─ PNR Number (if Flight/Train)
-│  │  └─ Upload Ticket (if Flight/Train)
+│  │  ├─ Flight:
+│  │  │  ├─ PNR (6 alphanumeric, validated)
+│  │  │  └─ Ticket Upload (validated)
+│  │  └─ Train:
+│  │     ├─ PNR (10 digits, validated)
+│  │     └─ Ticket Upload (validated)
 │  └─ Government ID Proof:
-│     ├─ ID Type (Aadhaar, Passport, Driving License, Voter ID)
-│     └─ Upload ID Proof
+│     ├─ ID Type (Aadhaar, Passport, DL, Voter ID)
+│     ├─ ID Number (validated per type)
+│     └─ Upload ID Proof (file validated)
 ├─ Guest list displayed in expandable tree format:
 │  └─ Click to expand/collapse each guest
 │     ├─ Personal Information section
@@ -476,13 +533,44 @@ Message History Tab:
 - Delete events
 - View event statistics (total RSVPs, guests, attendees)
 
-### 3. RSVP Collection
-- Multi-step form with validation
-- Collect personal details & ID proof
+### 3. RSVP Collection with Advanced Validation
+- Multi-step form with comprehensive validation
+- **Country-specific mobile validation:**
+  - 14 countries supported with exact digit count validation
+  - Country code dropdown with flags
+  - Real-time input filtering (digits only)
+  - Automatic truncation when country changes
+  - Visual feedback (green/red borders)
+- **Email validation:**
+  - Proper format validation (name@domain.com)
+  - Domain and local part validation
+  - No consecutive dots, start/end dots
+  - Real-time validation on blur
+- **Government ID validation with type-specific formats:**
+  - Aadhaar Card: 12 digits, cannot start with 0 or 1
+  - Passport: 1 letter + 7 digits (e.g., A1234567)
+  - Driving License: 2 letters + 13 digits (e.g., MH0120110012345)
+  - Voter ID: 3 letters + 7 digits (e.g., ABC1234567)
+  - Real-time character filtering per type
+  - Paste protection to prevent invalid input
+- **Travel information with PNR validation:**
+  - Flight PNR: 6 alphanumeric characters (e.g., ABC123)
+  - Train PNR: 10 numeric digits (e.g., 1234567890)
+  - Real-time uppercase conversion for flight PNRs
+  - Visual validation feedback
+- **File upload restrictions and UX:**
+  - Allowed: Images (JPG, PNG, WEBP, GIF) + PDF only
+  - Blocked: ZIP, DOCX, XLSX, TXT, EXE, etc.
+  - Max 5MB file size with error messages
+  - Upload success state with file preview:
+    - File name display (truncated if long)
+    - File size in KB
+    - Success indicator with checkmark
+    - Remove button to replace file
+  - Applied to ID proofs and travel tickets
 - Attendance tracking (single/couple/family)
 - Function-wise RSVP (Mehendi, Wedding, Reception, etc.)
-- Additional guest management with full details
-- Travel information collection
+- Additional guest management with full validation
 - Accommodation preferences
 - Dietary restrictions & special assistance
 - Data consent management
@@ -675,19 +763,43 @@ Supported file formats for detection:
 
 ### Form Validation
 - Required field validation per step
-- Email format validation
-- Phone number format check
+- **Mobile number validation:**
+  - Country-specific digit count validation
+  - Real-time error messages
+  - Visual feedback with red borders
+- **Email format validation:**
+  - Comprehensive email pattern checking
+  - Domain and structure validation
+  - Error messages on blur
+- **Government ID validation:**
+  - Type-specific format validation
+  - Real-time validation during typing
+  - Descriptive error messages per ID type
+- **PNR validation:**
+  - Flight: 6 alphanumeric characters
+  - Train: 10 numeric digits
+  - Visual feedback with error messages
+- **File upload validation:**
+  - File type checking (Images + PDF only)
+  - File size validation (max 5MB)
+  - Specific error messages showing:
+    - Invalid file type with actual type
+    - File size in MB if exceeds limit
 - Conditional validation based on selections
 
 ### Error Display
 - Red banner messages for form errors
+- Inline error messages below invalid fields
 - Toast-like notifications in forms
 - Validation feedback on submission
+- Color-coded borders (red for errors, green for valid)
 
 ### User Feedback
 - Success confirmation screen after RSVP
 - Detailed summary of submitted data
 - Loading states during operations
+- Upload success indicators with file details
+- Visual validation states throughout forms
 
 ---
 
@@ -743,6 +855,13 @@ Supported file formats for detection:
 - Basic email/password validation
 - localStorage for session storage
 - No server-side validation
+- **Client-side input validation:**
+  - Country-specific mobile number validation
+  - Email format validation
+  - Government ID format validation
+  - File type and size validation
+  - Real-time character filtering
+  - Paste protection for validated fields
 
 ### Recommendations
 - Add HTTPS enforcement
@@ -750,7 +869,15 @@ Supported file formats for detection:
 - Server-side authentication
 - Data encryption for sensitive info
 - GDPR compliance for guest data
-- File upload validation
+- **File upload security:**
+  - ✅ Client-side file type validation (currently implemented)
+  - Server-side file validation (recommended for production)
+  - Virus scanning for uploaded files
+  - Secure file storage with access controls
+  - File name sanitization
+- Input sanitization before database storage
+- Rate limiting for form submissions
+- CSRF protection
 
 ---
 
@@ -899,18 +1026,40 @@ npm run preview
 |------|---------|
 | `AuthContext.tsx` | Global authentication state |
 | `db.ts` | localStorage CRUD operations |
+| `constants.ts` | App-wide constants, country codes, and validation functions |
 | `guestListParser.ts` | Parse Excel/CSV files and detect event attendance |
 | `App.tsx` | Route configuration & auth protection |
 | `Dashboard.tsx` | Event list & management interface |
 | `CreateEvent.tsx` | Event creation form |
 | `EventDetail.tsx` | Event details, feature cards, guest list |
 | `GuestList.tsx` | Full-width guest list table view |
-| `RSVPForm.tsx` | Multi-step RSVP collection form |
+| `RSVPForm.tsx` | Multi-step RSVP collection form with comprehensive validation |
 | `BulkMessaging.tsx` | Bulk messaging and auto-send features |
 
 ---
 
-## Constants & Configuration
+### Constants & Configuration
+
+### Supported Country Codes (14 Countries)
+```javascript
+COUNTRY_CODES = [
+  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', digitCount: 10 },
+  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸', digitCount: 10 },
+  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧', digitCount: 10 },
+  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', digitCount: 10 },
+  { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', digitCount: 9 },
+  { code: 'AE', name: 'UAE', dialCode: '+971', flag: '🇦🇪', digitCount: 9 },
+  { code: 'SG', name: 'Singapore', dialCode: '+65', flag: '🇸🇬', digitCount: 8 },
+  { code: 'MY', name: 'Malaysia', dialCode: '+60', flag: '🇲🇾', digitCount: 10 },
+  { code: 'NZ', name: 'New Zealand', dialCode: '+64', flag: '🇳🇿', digitCount: 9 },
+  { code: 'ZA', name: 'South Africa', dialCode: '+27', flag: '🇿🇦', digitCount: 9 },
+  { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', digitCount: 11 },
+  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', digitCount: 9 },
+  { code: 'IT', name: 'Italy', dialCode: '+39', flag: '🇮🇹', digitCount: 10 },
+  { code: 'ES', name: 'Spain', dialCode: '+34', flag: '🇪🇸', digitCount: 9 }
+];
+DEFAULT_COUNTRY_CODE = 'IN';  // India as default
+```
 
 ### Functions Offered
 ```javascript
@@ -934,9 +1083,178 @@ ID_TYPES = [
 TRAVEL_MODES = [
   'By Flight',
   'By Train',
-  'By Car'
+  'Myself'
 ];
 ```
+
+### Validation Functions
+
+#### Mobile Number Validation
+```javascript
+validateMobileNumber(mobile, countryCode)
+// Returns: { isValid: boolean, error?: string }
+// Validates exact digit count per country
+// Example: India (IN) requires exactly 10 digits
+// Automatically strips non-digit characters
+```
+
+#### Email Validation
+```javascript
+validateEmail(email)
+// Returns: { isValid: boolean, error?: string }
+// Validates proper email format (name@domain.com)
+// Checks for:
+// - Valid email pattern with @ and domain
+// - No consecutive dots
+// - No dots at start/end
+// - Local part max 64 characters
+// - Domain max 255 characters
+// - Domain must include dot
+```
+
+#### Government ID Validation
+```javascript
+validateGovernmentId(idNumber, idType)
+// Returns: { isValid: boolean, error?: string }
+// Type-specific validation:
+
+validateAadhaar(aadhaar)
+// Format: Exactly 12 numeric digits
+// Cannot start with 0 or 1
+// Example: 234567890123
+
+validatePassport(passport)
+// Format: 1 uppercase letter + 7 digits
+// Example: A1234567
+
+validateDrivingLicense(dl)
+// Format: 2 letters + 13 digits
+// Example: MH0120110012345
+
+validateVoterId(voterId)
+// Format: 3 letters + 7 digits
+// Example: ABC1234567
+```
+
+#### Flight PNR Validation
+```javascript
+validateFlightPNR(pnr)
+// Returns: { isValid: boolean, error?: string }
+// Format: Exactly 6 alphanumeric characters
+// Automatically converts to uppercase
+// Example: ABC123, XYZ789
+```
+
+#### Train PNR Validation
+```javascript
+validateTrainPNR(pnr)
+// Returns: { isValid: boolean, error?: string }
+// Format: Exactly 10 numeric digits
+// Example: 1234567890
+```
+
+#### File Type Validation
+```javascript
+validateFileType(file)
+// Returns: boolean
+// Allowed types:
+// - Images: JPEG, JPG, PNG, WEBP, GIF, BMP, SVG
+// - Documents: PDF only
+// Blocked: ZIP, DOCX, XLSX, TXT, EXE, etc.
+// Max size: 5MB
+// Shows error message if invalid type or size
+```
+
+---
+
+## Form Validation Features
+
+### Real-Time Input Filtering
+All input fields implement real-time character filtering to prevent invalid input:
+
+**Mobile Number Fields:**
+- Automatically strips non-digit characters
+- Enforces maximum length based on selected country
+- Updates when country code changes (truncates if needed)
+- Visual feedback: green border (valid), red border (invalid)
+
+**Email Fields:**
+- Trims whitespace automatically
+- Validates on blur
+- Shows error message for invalid format
+- Visual feedback with border colors
+
+**Government ID Fields:**
+- Type-specific filtering:
+  - **Aadhaar**: Only digits, max 12 characters
+  - **Passport**: 1 letter (uppercase) + 7 digits, max 8 characters
+  - **Driving License**: 2 letters (uppercase) + 13 digits, max 15 characters
+  - **Voter ID**: 3 letters (uppercase) + 7 digits, max 10 characters
+- Real-time validation during typing
+- Prevents pasting invalid characters
+- Visual feedback with green/red borders
+
+**Flight PNR Fields:**
+- Only alphanumeric characters allowed
+- Automatically converts to uppercase
+- Max 6 characters enforced
+- Real-time validation with visual feedback
+
+**Train PNR Fields:**
+- Only numeric digits allowed
+- Max 10 digits enforced
+- Real-time validation with visual feedback
+
+### File Upload Validation & UX
+
+**Validation:**
+- File type checking on selection
+- Automatic rejection of invalid file types
+- File size validation (max 5MB)
+- Input field reset if invalid file selected
+- Error messages showing:
+  - Invalid file type with actual type selected
+  - File size in MB if exceeds limit
+
+**User Experience:**
+- **Empty State**: 
+  - Upload icon
+  - "Click to upload" text
+  - Allowed formats hint
+- **Uploaded State**:
+  - File icon with green background
+  - File name (truncated if long)
+  - File size in KB
+  - Green checkmark with "Uploaded successfully" message
+  - Remove button (X icon) to delete and replace
+  - Hover effects on remove button
+
+**Applied to:**
+- Personal Details: ID Front/Back uploads
+- Additional Guests: Government ID uploads
+- Travel Details: Flight/Train ticket uploads (both personal and per guest)
+
+### Visual Feedback System
+
+**Border Colors:**
+- **Blue** (default): Neutral state, field focused
+- **Green**: Valid input confirmed
+- **Red**: Invalid input with error message
+
+**Validation States:**
+- Shows validation immediately after user interaction
+- Error messages appear below invalid fields
+- Success indicators (checkmarks) for valid uploads
+- Color-coded borders throughout form
+
+**Paste Protection:**
+- Special onPaste handlers filter invalid characters
+- Works for all validated input fields
+- Prevents bypassing real-time validation
+
+---
+
+## Constants & Configuration
 
 ---
 
@@ -966,8 +1284,37 @@ TRAVEL_MODES = [
   - Data export to Excel
   - Full-width responsive design
 
+- **v1.1** - Enhanced validation and UX (May 2026)
+  - **Country-specific mobile validation** (14 countries)
+  - **Email format validation** with comprehensive checks
+  - **Government ID validation** with type-specific formats:
+    - Aadhaar Card (12 digits)
+    - Passport (letter + 7 digits)
+    - Driving License (2 letters + 13 digits)
+    - Voter ID (3 letters + 7 digits)
+  - **Flight PNR validation** (6 alphanumeric characters)
+  - **Train PNR validation** (10 numeric digits)
+  - **File upload restrictions**:
+    - Only images (JPG, PNG, WEBP, GIF) + PDF allowed
+    - 5MB max file size enforcement
+    - Invalid file type/size error messages
+  - **File upload UX enhancements**:
+    - Upload success preview with file name and size
+    - Success checkmark indicator
+    - Remove/replace functionality
+    - Visual feedback for all upload states
+  - **Real-time input filtering**:
+    - Character-level validation during typing
+    - Paste protection to prevent invalid input
+    - Auto-formatting (uppercase for PNRs, etc.)
+  - **Visual validation feedback**:
+    - Green borders for valid inputs
+    - Red borders for invalid inputs
+    - Inline error messages
+    - Success indicators on uploads
+
 ---
 
-**Last Updated:** May 15, 2026  
+**Last Updated:** May 17, 2026  
 **Maintainers:** [Project Team]  
 **Repository:** Yanikh-Wedding-RSVP

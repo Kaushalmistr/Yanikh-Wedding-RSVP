@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
-import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase } from 'lucide-react';
+import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
+import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
@@ -19,13 +20,14 @@ export default function RSVPForm() {
   const [formData, setFormData] = useState({
     name: '',
     gender: 'Male',
+    countryCode: DEFAULT_COUNTRY_CODE,
     mobile: '',
     email: '',
     city: '',
     respondingFor: 'Self' as 'Self' | 'Couple' | 'Family',
     attendanceStatus: 'Yes' as 'Yes' | 'Maybe' | 'Cannot attend',
     functionAttendance: {} as Record<string, 'Yes' | 'No'>,
-    additionalGuests: [] as Array<{ name: string; age: number; gender: 'Male' | 'Female' | 'Other'; relation: string; mobile: string; email: string; travelMode?: string; ticketFile?: File | null; pnrNumber?: string; govIdType?: string; govIdFile?: File | null }>,
+    additionalGuests: [] as Array<{ name: string; age: number; gender: 'Male' | 'Female' | 'Other'; relation: string; countryCode: string; mobile: string; email: string; travelMode?: string; ticketFile?: File | null; pnrNumber?: string; govIdType?: string; govIdNumber?: string; govIdFile?: File | null }>,
     needsAccommodation: false,
     checkInDate: '',
     checkOutDate: '',
@@ -55,24 +57,28 @@ export default function RSVPForm() {
     age: number; 
     gender: 'Male' | 'Female' | 'Other'; 
     relation: string;
+    countryCode: string;
     mobile: string;
     email: string;
     travelMode: string;
     ticketFile: File | null;
     pnrNumber: string;
     govIdType: string;
+    govIdNumber: string;
     govIdFile: File | null;
   }>({
     name: '', 
     age: 0, 
     gender: 'Male', 
     relation: '',
+    countryCode: DEFAULT_COUNTRY_CODE,
     mobile: '',
     email: '',
     travelMode: '',
     ticketFile: null,
     pnrNumber: '',
     govIdType: '',
+    govIdNumber: '',
     govIdFile: null
   });
 
@@ -83,8 +89,48 @@ export default function RSVPForm() {
     }
   }, [id]);
 
+  // Truncate mobile number when country code changes
+  useEffect(() => {
+    const country = COUNTRY_CODES.find(c => c.code === formData.countryCode);
+    if (country && formData.mobile.length > country.digitCount) {
+      updateForm('mobile', formData.mobile.slice(0, country.digitCount));
+    }
+  }, [formData.countryCode]);
+
   const updateForm = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Validate file type for uploads
+  const validateFileType = (file: File | null): boolean => {
+    if (!file) return true;
+    
+    const allowedTypes = [
+      // Images
+      'image/jpeg',
+      'image/jpg', 
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/bmp',
+      'image/svg+xml',
+      // PDF
+      'application/pdf'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      setError(`Invalid file type. Only images (JPG, PNG, WEBP, GIF) and PDF files are allowed. You selected: ${file.type || 'unknown type'}`);
+      return false;
+    }
+    
+    // Also check file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      setError(`File is too large. Maximum size is 5MB. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      return false;
+    }
+    
+    return true;
   };
 
   const toggleFunction = (func: string) => {
@@ -110,6 +156,21 @@ export default function RSVPForm() {
       setError('Please fill all guest details (Name, Relation, Mobile, Email)');
       return;
     }
+    
+    // Validate mobile number for additional guest
+    const mobileValidation = validateMobileNumber(newGuest.mobile, newGuest.countryCode);
+    if (!mobileValidation.isValid) {
+      setError(mobileValidation.error || 'Invalid mobile number');
+      return;
+    }
+    
+    // Validate email for additional guest
+    const emailValidation = validateEmail(newGuest.email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || 'Invalid email address');
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
       additionalGuests: [...prev.additionalGuests, { ...newGuest }]
@@ -119,12 +180,14 @@ export default function RSVPForm() {
       age: 0, 
       gender: 'Male', 
       relation: '',
+      countryCode: DEFAULT_COUNTRY_CODE,
       mobile: '',
       email: '',
       travelMode: '',
       ticketFile: null,
       pnrNumber: '',
       govIdType: '',
+      govIdNumber: '',
       govIdFile: null
     });
     setError('');
@@ -141,6 +204,27 @@ export default function RSVPForm() {
     if (step === 1) {
       if (!formData.name || !formData.mobile || !formData.email || !formData.city || !formData.idType || !formData.idNumber) {
         setError('Please fill all required fields including ID Proof');
+        return false;
+      }
+      
+      // Validate mobile number
+      const mobileValidation = validateMobileNumber(formData.mobile, formData.countryCode);
+      if (!mobileValidation.isValid) {
+        setError(mobileValidation.error || 'Invalid mobile number');
+        return false;
+      }
+      
+      // Validate email
+      const emailValidation = validateEmail(formData.email);
+      if (!emailValidation.isValid) {
+        setError(emailValidation.error || 'Invalid email address');
+        return false;
+      }
+      
+      // Validate Government ID
+      const idValidation = validateGovernmentId(formData.idNumber, formData.idType);
+      if (!idValidation.isValid) {
+        setError(idValidation.error || 'Invalid ID number');
         return false;
       }
     }
@@ -226,7 +310,7 @@ export default function RSVPForm() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 mb-1">Mobile</p>
-                    <p className="text-lg font-semibold">{formData.mobile}</p>
+                    <p className="text-lg font-semibold">{formatMobileForDisplay(formData.mobile, formData.countryCode)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 mb-1">City</p>
@@ -268,7 +352,7 @@ export default function RSVPForm() {
                           <div><p className="text-sm text-gray-500">Age</p><p className="font-semibold">{guest.age} years</p></div>
                           <div><p className="text-sm text-gray-500">Gender</p><p className="font-semibold">{guest.gender}</p></div>
                           <div><p className="text-sm text-gray-500">Relation</p><p className="font-semibold">{guest.relation}</p></div>
-                          <div><p className="text-sm text-gray-500">Mobile</p><p className="font-semibold">{guest.mobile}</p></div>
+                          <div><p className="text-sm text-gray-500">Mobile</p><p className="font-semibold">{formatMobileForDisplay(guest.mobile, guest.countryCode)}</p></div>
                           <div className="md:col-span-2"><p className="text-sm text-gray-500">Email</p><p className="font-semibold">{guest.email}</p></div>
                           {guest.travelMode && (
                             <div className="md:col-span-2">
@@ -371,10 +455,110 @@ export default function RSVPForm() {
                   <select value={formData.gender} onChange={e => updateForm('gender', e.target.value)} className="w-full px-5 py-4 border rounded-2xl">
                     <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
                   </select></div>
-                <div><label className="block text-sm font-medium mb-2">Mobile Number *</label>
-                  <input type="tel" value={formData.mobile} onChange={e => updateForm('mobile', e.target.value)} className="w-full px-5 py-4 border rounded-2xl" required /></div>
-                <div><label className="block text-sm font-medium mb-2">Email Address *</label>
-                  <input type="email" value={formData.email} onChange={e => updateForm('email', e.target.value)} className="w-full px-5 py-4 border rounded-2xl" required /></div>
+                
+                {/* Mobile Number with Country Code */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium mb-2">Mobile Number *</label>
+                  <div className="flex gap-3">
+                    <select 
+                      value={formData.countryCode} 
+                      onChange={e => updateForm('countryCode', e.target.value)} 
+                      className="px-4 py-4 border rounded-2xl bg-white min-w-[200px]"
+                    >
+                      {COUNTRY_CODES.map(country => (
+                        <option key={country.code} value={country.code}>
+                          {country.flag} {country.dialCode} {country.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex-1">
+                      <input 
+                        type="tel" 
+                        value={formData.mobile} 
+                        onChange={e => {
+                          const value = e.target.value.replace(/\D/g, ''); // Only allow digits
+                          const maxLength = COUNTRY_CODES.find(c => c.code === formData.countryCode)?.digitCount || 10;
+                          // Restrict to exact digit count
+                          if (value.length <= maxLength) {
+                            updateForm('mobile', value);
+                          }
+                        }}
+                        onPaste={e => {
+                          e.preventDefault();
+                          const pastedText = e.clipboardData.getData('text');
+                          const value = pastedText.replace(/\D/g, ''); // Only allow digits
+                          const maxLength = COUNTRY_CODES.find(c => c.code === formData.countryCode)?.digitCount || 10;
+                          updateForm('mobile', value.slice(0, maxLength));
+                        }}
+                        onBlur={() => {
+                          const validation = validateMobileNumber(formData.mobile, formData.countryCode);
+                          if (!validation.isValid && formData.mobile) {
+                            setError(validation.error || 'Invalid mobile number');
+                          } else {
+                            setError('');
+                          }
+                        }}
+                        maxLength={COUNTRY_CODES.find(c => c.code === formData.countryCode)?.digitCount}
+                        placeholder={`Enter ${COUNTRY_CODES.find(c => c.code === formData.countryCode)?.digitCount} digits`}
+                        className={`w-full px-5 py-4 border rounded-2xl ${
+                          formData.mobile && !validateMobileNumber(formData.mobile, formData.countryCode).isValid
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
+                            : formData.mobile && validateMobileNumber(formData.mobile, formData.countryCode).isValid
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                            : 'focus:border-blue-500 focus:ring-blue-200'
+                        }`}
+                        required 
+                      />
+                      {formData.mobile && (() => {
+                        const validation = validateMobileNumber(formData.mobile, formData.countryCode);
+                        const country = COUNTRY_CODES.find(c => c.code === formData.countryCode);
+                        return (
+                          <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                            {validation.isValid 
+                              ? `✓ Valid ${country?.name} number` 
+                              : validation.error || `Enter exactly ${country?.digitCount} digits`
+                            }
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email Address *</label>
+                  <input 
+                    type="email" 
+                    value={formData.email} 
+                    onChange={e => updateForm('email', e.target.value.trim())}
+                    onBlur={() => {
+                      const validation = validateEmail(formData.email);
+                      if (!validation.isValid && formData.email) {
+                        setError(validation.error || 'Invalid email address');
+                      } else {
+                        setError('');
+                      }
+                    }}
+                    placeholder="name@example.com"
+                    className={`w-full px-5 py-4 border rounded-2xl ${
+                      formData.email && !validateEmail(formData.email).isValid
+                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                        : formData.email && validateEmail(formData.email).isValid
+                        ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                        : 'focus:border-blue-500 focus:ring-blue-200'
+                    }`}
+                    required 
+                  />
+                  {formData.email && (() => {
+                    const validation = validateEmail(formData.email);
+                    return (
+                      <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                        {validation.isValid ? '✓ Valid email address' : validation.error}
+                      </p>
+                    );
+                  })()}
+                </div>
+                
                 <div className="md:col-span-2"><label className="block text-sm font-medium mb-2">City of Residence *</label>
                   <input type="text" value={formData.city} onChange={e => updateForm('city', e.target.value)} className="w-full px-5 py-4 border rounded-2xl" required /></div>
               </div>
@@ -382,7 +566,10 @@ export default function RSVPForm() {
               {/* ID Proof */}
               <div className="border border-gray-200 rounded-3xl p-8 bg-gray-50">
                 <h3 className="text-xl font-semibold mb-6">Government ID Proof</h3>
-                <select value={formData.idType} onChange={e => updateForm('idType', e.target.value)} className="w-full px-5 py-4 border rounded-2xl mb-6" required>
+                <select value={formData.idType} onChange={e => {
+                  updateForm('idType', e.target.value);
+                  updateForm('idNumber', ''); // Clear ID number when type changes
+                }} className="w-full px-5 py-4 border rounded-2xl mb-6" required>
                   <option value="">Select ID Type</option>
                   {ID_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
@@ -393,24 +580,227 @@ export default function RSVPForm() {
                     <p className="mb-4"><strong>Type:</strong> {formData.idType}</p>
                     <div className="mb-6">
                       <label className="block text-sm font-medium mb-2">{formData.idType} Number *</label>
-                      <input type="text" value={formData.idNumber} onChange={e => updateForm('idNumber', e.target.value)} className="w-full px-5 py-4 border rounded-2xl" required />
+                      <input 
+                        type="text" 
+                        value={formData.idNumber} 
+                        onChange={e => {
+                          let value = e.target.value.toUpperCase().replace(/\s+/g, '');
+                          
+                          // Apply type-specific filtering
+                          if (formData.idType === 'Aadhaar Card') {
+                            // Only digits, max 12
+                            value = value.replace(/\D/g, '').slice(0, 12);
+                          } else if (formData.idType === 'Passport') {
+                            // 1 letter + up to 7 digits
+                            if (value.length === 0) {
+                              value = '';
+                            } else if (value.length === 1) {
+                              // First character must be a letter
+                              value = value.replace(/[^A-Z]/g, '');
+                            } else {
+                              // First letter + digits only
+                              const letter = value[0].replace(/[^A-Z]/g, '');
+                              const digits = value.slice(1).replace(/\D/g, '').slice(0, 7);
+                              value = letter + digits;
+                            }
+                          } else if (formData.idType === 'Driving License') {
+                            // 2 letters + 13 digits
+                            if (value.length === 0) {
+                              value = '';
+                            } else if (value.length <= 2) {
+                              // First 2 characters must be letters
+                              value = value.replace(/[^A-Z]/g, '').slice(0, 2);
+                            } else {
+                              // First 2 letters + digits only
+                              const letters = value.slice(0, 2).replace(/[^A-Z]/g, '');
+                              const digits = value.slice(2).replace(/\D/g, '').slice(0, 13);
+                              value = letters + digits;
+                            }
+                          } else if (formData.idType === 'Voter ID') {
+                            // 3 letters + 7 digits
+                            if (value.length === 0) {
+                              value = '';
+                            } else if (value.length <= 3) {
+                              // First 3 characters must be letters
+                              value = value.replace(/[^A-Z]/g, '').slice(0, 3);
+                            } else {
+                              // First 3 letters + digits only
+                              const letters = value.slice(0, 3).replace(/[^A-Z]/g, '');
+                              const digits = value.slice(3).replace(/\D/g, '').slice(0, 7);
+                              value = letters + digits;
+                            }
+                          }
+                          
+                          updateForm('idNumber', value);
+                        }}
+                        onPaste={e => {
+                          e.preventDefault();
+                          const pastedText = e.clipboardData.getData('text').toUpperCase().replace(/\s+/g, '');
+                          let value = pastedText;
+                          
+                          // Apply same filtering as onChange
+                          if (formData.idType === 'Aadhaar Card') {
+                            value = pastedText.replace(/\D/g, '').slice(0, 12);
+                          } else if (formData.idType === 'Passport') {
+                            const letter = pastedText[0]?.replace(/[^A-Z]/g, '') || '';
+                            const digits = pastedText.slice(1).replace(/\D/g, '').slice(0, 7);
+                            value = letter + digits;
+                          } else if (formData.idType === 'Driving License') {
+                            const letters = pastedText.slice(0, 2).replace(/[^A-Z]/g, '');
+                            const digits = pastedText.slice(2).replace(/\D/g, '').slice(0, 13);
+                            value = letters + digits;
+                          } else if (formData.idType === 'Voter ID') {
+                            const letters = pastedText.slice(0, 3).replace(/[^A-Z]/g, '');
+                            const digits = pastedText.slice(3).replace(/\D/g, '').slice(0, 7);
+                            value = letters + digits;
+                          }
+                          
+                          updateForm('idNumber', value);
+                        }}
+                        onBlur={() => {
+                          const validation = validateGovernmentId(formData.idNumber, formData.idType);
+                          if (!validation.isValid && formData.idNumber) {
+                            setError(validation.error || 'Invalid ID number');
+                          } else {
+                            setError('');
+                          }
+                        }}
+                        maxLength={
+                          formData.idType === 'Aadhaar Card' ? 12 :
+                          formData.idType === 'Passport' ? 8 :
+                          formData.idType === 'Driving License' ? 15 :
+                          formData.idType === 'Voter ID' ? 10 :
+                          50
+                        }
+                        placeholder={
+                          formData.idType === 'Aadhaar Card' ? 'e.g., 234567890123' :
+                          formData.idType === 'Passport' ? 'e.g., A1234567' :
+                          formData.idType === 'Driving License' ? 'e.g., MH0120110012345' :
+                          formData.idType === 'Voter ID' ? 'e.g., ABC1234567' :
+                          'Enter ID Number'
+                        }
+                        className={`w-full px-5 py-4 border rounded-2xl ${
+                          formData.idNumber && !validateGovernmentId(formData.idNumber, formData.idType).isValid
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                            : formData.idNumber && validateGovernmentId(formData.idNumber, formData.idType).isValid
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                            : 'focus:border-blue-500 focus:ring-blue-200'
+                        }`}
+                        required 
+                      />
+                      {formData.idNumber && (() => {
+                        const validation = validateGovernmentId(formData.idNumber, formData.idType);
+                        return (
+                          <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                            {validation.isValid 
+                              ? `✓ Valid ${formData.idType}` 
+                              : validation.error
+                            }
+                          </p>
+                        );
+                      })()}
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
+                      {/* Front Side Upload */}
                       <div>
                         <label className="block text-sm font-medium mb-2">Front Side *</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-rose-400">
-                          <Upload className="w-8 h-8 text-gray-400" />
-                          <span className="text-sm mt-2">Upload Front Side</span>
-                          <input type="file" className="hidden" onChange={(e) => updateForm('idFront', e.target.files?.[0] || null)} />
-                        </label>
+                        {!formData.idFront ? (
+                          <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-rose-400 transition-colors">
+                            <Upload className="w-8 h-8 text-gray-400" />
+                            <span className="text-sm mt-2 text-gray-600">Upload Front Side</span>
+                            <span className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP, PDF (Max 5MB)</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (file && validateFileType(file)) {
+                                  updateForm('idFront', file);
+                                } else if (file) {
+                                  e.target.value = ''; // Reset input
+                                }
+                              }} 
+                            />
+                          </label>
+                        ) : (
+                          <div className="border-2 border-green-300 bg-green-50 rounded-2xl p-6">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                                  <File className="w-5 h-5 text-green-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{formData.idFront.name}</p>
+                                  <p className="text-xs text-gray-500">{(formData.idFront.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateForm('idFront', null)}
+                                className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
+                                title="Remove file"
+                              >
+                                <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Front side uploaded successfully</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      
+                      {/* Back Side Upload */}
                       <div>
                         <label className="block text-sm font-medium mb-2">Back Side *</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-rose-400">
-                          <Upload className="w-8 h-8 text-gray-400" />
-                          <span className="text-sm mt-2">Upload Back Side</span>
-                          <input type="file" className="hidden" onChange={(e) => updateForm('idBack', e.target.files?.[0] || null)} />
-                        </label>
+                        {!formData.idBack ? (
+                          <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-rose-400 transition-colors">
+                            <Upload className="w-8 h-8 text-gray-400" />
+                            <span className="text-sm mt-2 text-gray-600">Upload Back Side</span>
+                            <span className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP, PDF (Max 5MB)</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (file && validateFileType(file)) {
+                                  updateForm('idBack', file);
+                                } else if (file) {
+                                  e.target.value = ''; // Reset input
+                                }
+                              }} 
+                            />
+                          </label>
+                        ) : (
+                          <div className="border-2 border-green-300 bg-green-50 rounded-2xl p-6">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                                  <File className="w-5 h-5 text-green-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{formData.idBack.name}</p>
+                                  <p className="text-xs text-gray-500">{(formData.idBack.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateForm('idBack', null)}
+                                className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
+                                title="Remove file"
+                              >
+                                <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Back side uploaded successfully</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -434,15 +824,73 @@ export default function RSVPForm() {
                   <div className="bg-white p-6 rounded-2xl border border-gray-200 mb-4">
                     <div className="mb-4">
                       <label className="block text-sm font-medium mb-2">Flight PNR Number</label>
-                      <input type="text" value={formData.flightPnr} onChange={e => updateForm('flightPnr', e.target.value)} placeholder="Enter PNR" className="w-full px-5 py-4 border rounded-2xl" />
+                      <input 
+                        type="text" 
+                        value={formData.flightPnr} 
+                        onChange={e => {
+                          const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+                          updateForm('flightPnr', value);
+                        }}
+                        maxLength={6}
+                        placeholder="e.g., ABC123" 
+                        className={`w-full px-5 py-4 border rounded-2xl ${
+                          formData.flightPnr && !validateFlightPNR(formData.flightPnr).isValid
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                            : formData.flightPnr && validateFlightPNR(formData.flightPnr).isValid
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                            : 'focus:border-blue-500 focus:ring-blue-200'
+                        }`}
+                      />
+                      {formData.flightPnr && !validateFlightPNR(formData.flightPnr).isValid && (
+                        <p className="text-xs text-red-600 mt-2">{validateFlightPNR(formData.flightPnr).error}</p>
+                      )}
                     </div>
                     <label className="block text-sm font-medium mb-2">Upload Flight Ticket</label>
-                    <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400">
-                      <Upload className="w-8 h-8 text-gray-400" />
-                      <span className="text-sm mt-2">Click to upload</span>
-                      <input type="file" className="hidden" onChange={(e) => updateForm('flightTicket', e.target.files?.[0] || null)} />
-                    </label>
-                    {formData.flightTicket && <p className="text-green-600 text-sm mt-2">✓ {formData.flightTicket.name}</p>}
+                    {!formData.flightTicket ? (
+                      <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                        <Upload className="w-8 h-8 text-gray-400" />
+                        <span className="text-sm mt-2 text-gray-600">Click to upload</span>
+                        <span className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP, PDF (Max 5MB)</span>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (file && validateFileType(file)) {
+                              updateForm('flightTicket', file);
+                            } else if (file) {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <div className="border-2 border-green-300 bg-green-50 rounded-2xl p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <File className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{formData.flightTicket.name}</p>
+                              <p className="text-xs text-gray-500">{(formData.flightTicket.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateForm('flightTicket', null)}
+                            className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
+                            title="Remove file"
+                          >
+                            <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
+                          </button>
+                        </div>
+                        <p className="text-green-600 text-sm flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4" /> Uploaded successfully
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -450,15 +898,73 @@ export default function RSVPForm() {
                   <div className="bg-white p-6 rounded-2xl border border-gray-200">
                     <div className="mb-4">
                       <label className="block text-sm font-medium mb-2">Train PNR Number</label>
-                      <input type="text" value={formData.trainPnr} onChange={e => updateForm('trainPnr', e.target.value)} placeholder="Enter PNR" className="w-full px-5 py-4 border rounded-2xl" />
+                      <input 
+                        type="text" 
+                        value={formData.trainPnr} 
+                        onChange={e => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          updateForm('trainPnr', value);
+                        }}
+                        maxLength={10}
+                        placeholder="e.g., 1234567890" 
+                        className={`w-full px-5 py-4 border rounded-2xl ${
+                          formData.trainPnr && !validateTrainPNR(formData.trainPnr).isValid
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                            : formData.trainPnr && validateTrainPNR(formData.trainPnr).isValid
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                            : 'focus:border-blue-500 focus:ring-blue-200'
+                        }`}
+                      />
+                      {formData.trainPnr && !validateTrainPNR(formData.trainPnr).isValid && (
+                        <p className="text-xs text-red-600 mt-2">{validateTrainPNR(formData.trainPnr).error}</p>
+                      )}
                     </div>
                     <label className="block text-sm font-medium mb-2">Upload Train Ticket</label>
-                    <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400">
-                      <Upload className="w-8 h-8 text-gray-400" />
-                      <span className="text-sm mt-2">Click to upload</span>
-                      <input type="file" className="hidden" onChange={(e) => updateForm('trainTicket', e.target.files?.[0] || null)} />
-                    </label>
-                    {formData.trainTicket && <p className="text-green-600 text-sm mt-2">✓ {formData.trainTicket.name}</p>}
+                    {!formData.trainTicket ? (
+                      <label className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                        <Upload className="w-8 h-8 text-gray-400" />
+                        <span className="text-sm mt-2 text-gray-600">Click to upload</span>
+                        <span className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP, PDF (Max 5MB)</span>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (file && validateFileType(file)) {
+                              updateForm('trainTicket', file);
+                            } else if (file) {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <div className="border-2 border-green-300 bg-green-50 rounded-2xl p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <File className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{formData.trainTicket.name}</p>
+                              <p className="text-xs text-gray-500">{(formData.trainTicket.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateForm('trainTicket', null)}
+                            className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
+                            title="Remove file"
+                          >
+                            <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
+                          </button>
+                        </div>
+                        <p className="text-green-600 text-sm flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4" /> Uploaded successfully
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -551,7 +1057,7 @@ export default function RSVPForm() {
                                 <div><span className="text-gray-600">Age:</span> <span className="font-medium">{g.age} years</span></div>
                                 <div><span className="text-gray-600">Gender:</span> <span className="font-medium">{g.gender}</span></div>
                                 <div className="col-span-2"><span className="text-gray-600">Relation:</span> <span className="font-medium">{g.relation}</span></div>
-                                <div className="col-span-2"><span className="text-gray-600">Mobile:</span> <span className="font-medium">{g.mobile}</span></div>
+                                <div className="col-span-2"><span className="text-gray-600">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(g.mobile, g.countryCode)}</span></div>
                                 <div className="col-span-2"><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{g.email}</span></div>
                               </div>
                             </div>
@@ -609,9 +1115,86 @@ export default function RSVPForm() {
                   {/* Contact Info */}
                   <div className="mb-6">
                     <h5 className="text-sm font-medium text-gray-600 mb-4">Contact Information</h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input type="tel" placeholder="Mobile Number *" value={newGuest.mobile} onChange={e => setNewGuest(g => ({...g, mobile: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
-                      <input type="email" placeholder="Email Address *" value={newGuest.email} onChange={e => setNewGuest(g => ({...g, email: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                    
+                    {/* Country Code + Mobile Number */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Mobile Number *</label>
+                      <div className="flex gap-3">
+                        <select 
+                          value={newGuest.countryCode} 
+                          onChange={e => setNewGuest(g => ({...g, countryCode: e.target.value}))} 
+                          className="px-3 py-4 border rounded-2xl bg-white text-sm min-w-[180px]"
+                        >
+                          {COUNTRY_CODES.map(country => (
+                            <option key={country.code} value={country.code}>
+                              {country.flag} {country.dialCode}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex-1">
+                          <input 
+                            type="tel" 
+                            placeholder={`${COUNTRY_CODES.find(c => c.code === newGuest.countryCode)?.digitCount} digits`}
+                            value={newGuest.mobile} 
+                            onChange={e => {
+                              const value = e.target.value.replace(/\D/g, '');
+                              const maxLength = COUNTRY_CODES.find(c => c.code === newGuest.countryCode)?.digitCount || 10;
+                              if (value.length <= maxLength) {
+                                setNewGuest(g => ({...g, mobile: value}));
+                              }
+                            }}
+                            onPaste={e => {
+                              e.preventDefault();
+                              const pastedText = e.clipboardData.getData('text');
+                              const value = pastedText.replace(/\D/g, '');
+                              const maxLength = COUNTRY_CODES.find(c => c.code === newGuest.countryCode)?.digitCount || 10;
+                              setNewGuest(g => ({...g, mobile: value.slice(0, maxLength)}));
+                            }}
+                            maxLength={COUNTRY_CODES.find(c => c.code === newGuest.countryCode)?.digitCount}
+                            className={`w-full px-5 py-4 border rounded-2xl ${
+                              newGuest.mobile && !validateMobileNumber(newGuest.mobile, newGuest.countryCode).isValid
+                                ? 'border-red-300 focus:border-red-500' 
+                                : newGuest.mobile && validateMobileNumber(newGuest.mobile, newGuest.countryCode).isValid
+                                ? 'border-green-300 focus:border-green-500'
+                                : ''
+                            }`}
+                          />
+                          {newGuest.mobile && (() => {
+                            const validation = validateMobileNumber(newGuest.mobile, newGuest.countryCode);
+                            return (
+                              <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                                {validation.isValid ? '✓ Valid' : validation.error}
+                              </p>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Email Address *</label>
+                      <input 
+                        type="email" 
+                        placeholder="name@example.com" 
+                        value={newGuest.email} 
+                        onChange={e => setNewGuest(g => ({...g, email: e.target.value.trim()}))}
+                        className={`w-full px-5 py-4 border rounded-2xl ${
+                          newGuest.email && !validateEmail(newGuest.email).isValid
+                            ? 'border-red-300 focus:border-red-500'
+                            : newGuest.email && validateEmail(newGuest.email).isValid
+                            ? 'border-green-300 focus:border-green-500'
+                            : ''
+                        }`}
+                      />
+                      {newGuest.email && (() => {
+                        const validation = validateEmail(newGuest.email);
+                        return (
+                          <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                            {validation.isValid ? '✓ Valid' : validation.error}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -632,27 +1215,141 @@ export default function RSVPForm() {
                     
                     {newGuest.travelMode === 'By Flight' && (
                       <div className="bg-white p-4 rounded-xl border border-gray-200">
-                        <input type="text" placeholder="Flight PNR Number" value={newGuest.pnrNumber} onChange={e => setNewGuest(g => ({...g, pnrNumber: e.target.value}))} className="w-full px-3 py-2 border rounded-lg mb-3 text-sm" />
+                        <label className="block text-xs font-medium text-gray-600 mb-2">Flight PNR Number</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g., ABC123" 
+                          value={newGuest.pnrNumber || ''} 
+                          onChange={e => {
+                            const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+                            setNewGuest(g => ({...g, pnrNumber: value}));
+                          }}
+                          maxLength={6}
+                          className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
+                            newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid
+                              ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                              : newGuest.pnrNumber && validateFlightPNR(newGuest.pnrNumber).isValid
+                              ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                          }`}
+                        />
+                        {newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid && (
+                          <p className="text-xs text-red-600 mb-3 -mt-2">{validateFlightPNR(newGuest.pnrNumber).error}</p>
+                        )}
                         <label className="block text-xs font-medium mb-2">Upload Ticket</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400">
-                          <Upload className="w-5 h-5 text-gray-400" />
-                          <span className="text-xs mt-1">Upload</span>
-                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, ticketFile: e.target.files?.[0] || null}))} />
-                        </label>
-                        {newGuest.ticketFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.ticketFile.name}</p>}
+                        {!newGuest.ticketFile ? (
+                          <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                            <Upload className="w-5 h-5 text-gray-400" />
+                            <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
+                            <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (file && validateFileType(file)) {
+                                  setNewGuest(g => ({...g, ticketFile: file}));
+                                } else if (file) {
+                                  e.target.value = '';
+                                }
+                              }} 
+                            />
+                          </label>
+                        ) : (
+                          <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <File className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
+                                  <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setNewGuest(g => ({...g, ticketFile: null}))}
+                                className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
+                                title="Remove"
+                              >
+                                <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
+                              </button>
+                            </div>
+                            <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Uploaded
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {newGuest.travelMode === 'By Train' && (
                       <div className="bg-white p-4 rounded-xl border border-gray-200">
-                        <input type="text" placeholder="Train PNR Number" value={newGuest.pnrNumber} onChange={e => setNewGuest(g => ({...g, pnrNumber: e.target.value}))} className="w-full px-3 py-2 border rounded-lg mb-3 text-sm" />
+                        <label className="block text-xs font-medium text-gray-600 mb-2">Train PNR Number</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g., 1234567890" 
+                          value={newGuest.pnrNumber || ''} 
+                          onChange={e => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setNewGuest(g => ({...g, pnrNumber: value}));
+                          }}
+                          maxLength={10}
+                          className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
+                            newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid
+                              ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                              : newGuest.pnrNumber && validateTrainPNR(newGuest.pnrNumber).isValid
+                              ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                          }`}
+                        />
+                        {newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid && (
+                          <p className="text-xs text-red-600 mb-3 -mt-2">{validateTrainPNR(newGuest.pnrNumber).error}</p>
+                        )}
                         <label className="block text-xs font-medium mb-2">Upload Ticket</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400">
-                          <Upload className="w-5 h-5 text-gray-400" />
-                          <span className="text-xs mt-1">Upload</span>
-                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, ticketFile: e.target.files?.[0] || null}))} />
-                        </label>
-                        {newGuest.ticketFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.ticketFile.name}</p>}
+                        {!newGuest.ticketFile ? (
+                          <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                            <Upload className="w-5 h-5 text-gray-400" />
+                            <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
+                            <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (file && validateFileType(file)) {
+                                  setNewGuest(g => ({...g, ticketFile: file}));
+                                } else if (file) {
+                                  e.target.value = '';
+                                }
+                              }} 
+                            />
+                          </label>
+                        ) : (
+                          <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <File className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
+                                  <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setNewGuest(g => ({...g, ticketFile: null}))}
+                                className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
+                                title="Remove"
+                              >
+                                <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
+                              </button>
+                            </div>
+                            <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Uploaded
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -660,19 +1357,169 @@ export default function RSVPForm() {
                   {/* Government ID */}
                   <div className="mb-6 p-4 bg-orange-50 rounded-2xl border border-orange-200">
                     <h5 className="text-sm font-medium text-gray-600 mb-4">Government ID Proof (Optional)</h5>
-                    <select value={newGuest.govIdType} onChange={e => setNewGuest(g => ({...g, govIdType: e.target.value}))} className="w-full px-4 py-2 border rounded-lg text-sm mb-3">
+                    <select value={newGuest.govIdType} onChange={e => setNewGuest(g => ({...g, govIdType: e.target.value, govIdNumber: ''}))} className="w-full px-4 py-2 border rounded-lg text-sm mb-3">
                       <option value="">Select ID Type</option>
                       {ID_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
                     </select>
                     {newGuest.govIdType && (
                       <div>
-                        <label className="block text-xs font-medium mb-2">Upload ID Proof</label>
-                        <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-orange-400">
-                          <Upload className="w-5 h-5 text-gray-400" />
-                          <span className="text-xs mt-1">Upload</span>
-                          <input type="file" className="hidden" onChange={(e) => setNewGuest(g => ({...g, govIdFile: e.target.files?.[0] || null}))} />
-                        </label>
-                        {newGuest.govIdFile && <p className="text-green-600 text-xs mt-2">✓ {newGuest.govIdFile.name}</p>}
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium mb-2">{newGuest.govIdType} Number</label>
+                          <input
+                            type="text"
+                            value={newGuest.govIdNumber}
+                            onChange={e => {
+                              let value = e.target.value.toUpperCase().replace(/\s+/g, '');
+                              
+                              // Apply type-specific filtering
+                              if (newGuest.govIdType === 'Aadhaar Card') {
+                                // Only digits, max 12
+                                value = value.replace(/\D/g, '').slice(0, 12);
+                              } else if (newGuest.govIdType === 'Passport') {
+                                // 1 letter + up to 7 digits
+                                if (value.length === 0) {
+                                  value = '';
+                                } else if (value.length === 1) {
+                                  value = value.replace(/[^A-Z]/g, '');
+                                } else {
+                                  const letter = value[0].replace(/[^A-Z]/g, '');
+                                  const digits = value.slice(1).replace(/\D/g, '').slice(0, 7);
+                                  value = letter + digits;
+                                }
+                              } else if (newGuest.govIdType === 'Driving License') {
+                                // 2 letters + 13 digits
+                                if (value.length === 0) {
+                                  value = '';
+                                } else if (value.length <= 2) {
+                                  value = value.replace(/[^A-Z]/g, '').slice(0, 2);
+                                } else {
+                                  const letters = value.slice(0, 2).replace(/[^A-Z]/g, '');
+                                  const digits = value.slice(2).replace(/\D/g, '').slice(0, 13);
+                                  value = letters + digits;
+                                }
+                              } else if (newGuest.govIdType === 'Voter ID') {
+                                // 3 letters + 7 digits
+                                if (value.length === 0) {
+                                  value = '';
+                                } else if (value.length <= 3) {
+                                  value = value.replace(/[^A-Z]/g, '').slice(0, 3);
+                                } else {
+                                  const letters = value.slice(0, 3).replace(/[^A-Z]/g, '');
+                                  const digits = value.slice(3).replace(/\D/g, '').slice(0, 7);
+                                  value = letters + digits;
+                                }
+                              }
+                              
+                              setNewGuest(g => ({...g, govIdNumber: value}));
+                            }}
+                            onPaste={e => {
+                              e.preventDefault();
+                              const pastedText = e.clipboardData.getData('text').toUpperCase().replace(/\s+/g, '');
+                              let value = pastedText;
+                              
+                              // Apply same filtering as onChange
+                              if (newGuest.govIdType === 'Aadhaar Card') {
+                                value = pastedText.replace(/\D/g, '').slice(0, 12);
+                              } else if (newGuest.govIdType === 'Passport') {
+                                const letter = pastedText[0]?.replace(/[^A-Z]/g, '') || '';
+                                const digits = pastedText.slice(1).replace(/\D/g, '').slice(0, 7);
+                                value = letter + digits;
+                              } else if (newGuest.govIdType === 'Driving License') {
+                                const letters = pastedText.slice(0, 2).replace(/[^A-Z]/g, '');
+                                const digits = pastedText.slice(2).replace(/\D/g, '').slice(0, 13);
+                                value = letters + digits;
+                              } else if (newGuest.govIdType === 'Voter ID') {
+                                const letters = pastedText.slice(0, 3).replace(/[^A-Z]/g, '');
+                                const digits = pastedText.slice(3).replace(/\D/g, '').slice(0, 7);
+                                value = letters + digits;
+                              }
+                              
+                              setNewGuest(g => ({...g, govIdNumber: value}));
+                            }}
+                            maxLength={
+                              newGuest.govIdType === 'Aadhaar Card' ? 12 :
+                              newGuest.govIdType === 'Passport' ? 8 :
+                              newGuest.govIdType === 'Driving License' ? 15 :
+                              newGuest.govIdType === 'Voter ID' ? 10 :
+                              50
+                            }
+                            placeholder={
+                              newGuest.govIdType === 'Aadhaar Card' ? 'e.g., 234567890123' :
+                              newGuest.govIdType === 'Passport' ? 'e.g., A1234567' :
+                              newGuest.govIdType === 'Driving License' ? 'e.g., MH0120110012345' :
+                              newGuest.govIdType === 'Voter ID' ? 'e.g., ABC1234567' :
+                              'Enter ID Number'
+                            }
+                            className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                              newGuest.govIdNumber && !validateGovernmentId(newGuest.govIdNumber, newGuest.govIdType).isValid
+                                ? 'border-red-300 focus:border-red-500'
+                                : newGuest.govIdNumber && validateGovernmentId(newGuest.govIdNumber, newGuest.govIdType).isValid
+                                ? 'border-green-300 focus:border-green-500'
+                                : ''
+                            }`}
+                          />
+                          {newGuest.govIdNumber && (() => {
+                            const validation = validateGovernmentId(newGuest.govIdNumber, newGuest.govIdType);
+                            return (
+                              <p className={`text-xs mt-1 font-medium ${
+                                validation.isValid ? 'text-green-600' : 'text-orange-600'
+                              }`}>
+                                {validation.isValid ? '✓ Valid' : validation.error}
+                              </p>
+                            );
+                          })()}
+                        </div>
+                        
+                        {/* File Upload with Preview */}
+                        <div>
+                          <label className="block text-xs font-medium mb-2">Upload ID Proof</label>
+                          {!newGuest.govIdFile ? (
+                            <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-orange-400 transition-colors">
+                              <Upload className="w-5 h-5 text-gray-400" />
+                              <span className="text-xs mt-1 text-gray-600">Upload Document</span>
+                              <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, WEBP, PDF</span>
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  if (file && validateFileType(file)) {
+                                    setNewGuest(g => ({...g, govIdFile: file}));
+                                  } else if (file) {
+                                    e.target.value = ''; // Reset input
+                                  }
+                                }} 
+                              />
+                            </label>
+                          ) : (
+                            <div className="border-2 border-green-300 bg-green-50 rounded-lg p-3">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <div className="w-8 h-8 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
+                                    <File className="w-4 h-4 text-green-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-900 truncate">{newGuest.govIdFile.name}</p>
+                                    <p className="text-[10px] text-gray-500">{(newGuest.govIdFile.size / 1024).toFixed(1)} KB</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setNewGuest(g => ({...g, govIdFile: null}))}
+                                  className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
+                                  title="Remove file"
+                                >
+                                  <X className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-600" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-green-600 text-xs font-medium">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span>Uploaded successfully</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

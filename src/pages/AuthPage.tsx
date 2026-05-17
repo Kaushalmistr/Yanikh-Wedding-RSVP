@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createUser, findUserByMobile, generateOTP } from '../lib/db';
 import { Heart, Phone, Shield, User, Mail, Copy, CheckCircle } from 'lucide-react';
+import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail } from '../lib/constants';
 
 type AuthMode = 'login' | 'signup' | 'otp';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [mobile, setMobile] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,10 +33,21 @@ export default function AuthPage() {
       setError('All fields are required');
       return;
     }
-    if (mobile.length < 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || 'Please enter a valid email address');
       return;
     }
+    
+    // Validate mobile number based on country code
+    const validation = validateMobileNumber(mobile, countryCode);
+    if (!validation.isValid) {
+      setError(validation.error || 'Please enter a valid mobile number');
+      return;
+    }
+    
     try {
       createUser(name.trim(), email.trim(), mobile.trim());
       setSuccessMessage('Account created successfully! Please login with your mobile number.');
@@ -52,8 +65,10 @@ export default function AuthPage() {
     setError('');
     setSuccessMessage('');
     
-    if (mobile.length < 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    // Validate mobile number based on country code
+    const validation = validateMobileNumber(mobile, countryCode);
+    if (!validation.isValid) {
+      setError(validation.error || 'Please enter a valid mobile number');
       return;
     }
 
@@ -173,17 +188,66 @@ export default function AuthPage() {
 
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
-                  <div className="relative">
-                    <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                    <input
-                      type="tel"
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                      placeholder="9876543210"
-                      className="w-full pl-12 pr-4 py-4 text-lg border border-gray-200 rounded-2xl focus:border-rose-500 focus:ring-rose-500 outline-none"
-                      maxLength={10}
-                    />
+                  <div className="flex gap-2">
+                    <select
+                      value={countryCode}
+                      onChange={(e) => {
+                        setCountryCode(e.target.value);
+                        // Clear mobile if switching to a country with different length
+                        const newCountry = COUNTRY_CODES.find(c => c.code === e.target.value);
+                        if (newCountry && mobile.length > newCountry.digitCount) {
+                          setMobile(mobile.slice(0, newCountry.digitCount));
+                        }
+                      }}
+                      className="px-3 py-4 border border-gray-200 rounded-2xl bg-white text-sm min-w-[140px] focus:border-rose-500 focus:ring-rose-500 outline-none"
+                    >
+                      {COUNTRY_CODES.map(country => (
+                        <option key={country.code} value={country.code}>
+                          {country.flag} {country.dialCode}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex-1 relative">
+                      <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={mobile}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const maxLength = COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount || 10;
+                          if (value.length <= maxLength) {
+                            setMobile(value);
+                          }
+                        }}
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          const pastedText = e.clipboardData.getData('text');
+                          const value = pastedText.replace(/\D/g, '');
+                          const maxLength = COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount || 10;
+                          setMobile(value.slice(0, maxLength));
+                        }}
+                        placeholder={`Enter ${COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount} digits`}
+                        className={`w-full pl-12 pr-4 py-4 text-lg border border-gray-200 rounded-2xl focus:border-rose-500 focus:ring-rose-500 outline-none ${
+                          mobile && !validateMobileNumber(mobile, countryCode).isValid
+                            ? 'border-red-300'
+                            : mobile && validateMobileNumber(mobile, countryCode).isValid
+                            ? 'border-green-300'
+                            : ''
+                        }`}
+                        maxLength={COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount}
+                      />
+                    </div>
                   </div>
+                  {mobile && (() => {
+                    const validation = validateMobileNumber(mobile, countryCode);
+                    return (
+                      <p className={`text-xs mt-1 font-medium ml-[148px] ${
+                        validation.isValid ? 'text-green-600' : 'text-orange-600'
+                      }`}>
+                        {validation.isValid ? '✓ Valid' : validation.error}
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 <button
@@ -223,26 +287,96 @@ export default function AuthPage() {
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl focus:border-rose-500 outline-none"
+                        onChange={(e) => setEmail(e.target.value.trim())}
+                        onBlur={() => {
+                          const validation = validateEmail(email);
+                          if (!validation.isValid && email) {
+                            setError(validation.error || 'Invalid email address');
+                          } else {
+                            setError('');
+                          }
+                        }}
+                        placeholder="name@example.com"
+                        className={`w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl focus:border-rose-500 outline-none ${
+                          email && !validateEmail(email).isValid
+                            ? 'border-red-300'
+                            : email && validateEmail(email).isValid
+                            ? 'border-green-300'
+                            : ''
+                        }`}
                       />
                     </div>
+                    {email && (() => {
+                      const validation = validateEmail(email);
+                      return (
+                        <p className={`text-xs mt-1 font-medium ${validation.isValid ? 'text-green-600' : 'text-orange-600'}`}>
+                          {validation.isValid ? '✓ Valid email address' : validation.error}
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
-                    <div className="relative">
-                      <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                      <input
-                        type="tel"
-                        value={mobile}
-                        onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        placeholder="9876543210"
-                        className="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl focus:border-rose-500 outline-none"
-                        maxLength={10}
-                      />
+                    <div className="flex gap-2">
+                      <select
+                        value={countryCode}
+                        onChange={(e) => {
+                          setCountryCode(e.target.value);
+                          const newCountry = COUNTRY_CODES.find(c => c.code === e.target.value);
+                          if (newCountry && mobile.length > newCountry.digitCount) {
+                            setMobile(mobile.slice(0, newCountry.digitCount));
+                          }
+                        }}
+                        className="px-3 py-4 border border-gray-200 rounded-2xl bg-white text-sm min-w-[140px] focus:border-rose-500 outline-none"
+                      >
+                        {COUNTRY_CODES.map(country => (
+                          <option key={country.code} value={country.code}>
+                            {country.flag} {country.dialCode}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex-1 relative">
+                        <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
+                        <input
+                          type="tel"
+                          value={mobile}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '');
+                            const maxLength = COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount || 10;
+                            if (value.length <= maxLength) {
+                              setMobile(value);
+                            }
+                          }}
+                          onPaste={(e) => {
+                            e.preventDefault();
+                            const pastedText = e.clipboardData.getData('text');
+                            const value = pastedText.replace(/\D/g, '');
+                            const maxLength = COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount || 10;
+                            setMobile(value.slice(0, maxLength));
+                          }}
+                          placeholder={`Enter ${COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount} digits`}
+                          className={`w-full pl-12 pr-4 py-4 border border-gray-200 rounded-2xl focus:border-rose-500 outline-none ${
+                            mobile && !validateMobileNumber(mobile, countryCode).isValid
+                              ? 'border-red-300'
+                              : mobile && validateMobileNumber(mobile, countryCode).isValid
+                              ? 'border-green-300'
+                              : ''
+                          }`}
+                          maxLength={COUNTRY_CODES.find(c => c.code === countryCode)?.digitCount}
+                        />
+                      </div>
                     </div>
+                    {mobile && (() => {
+                      const validation = validateMobileNumber(mobile, countryCode);
+                      return (
+                        <p className={`text-xs mt-1 font-medium ml-[148px] ${
+                          validation.isValid ? 'text-green-600' : 'text-orange-600'
+                        }`}>
+                          {validation.isValid ? '✓ Valid' : validation.error}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -261,7 +395,7 @@ export default function AuthPage() {
                 <div className="text-center">
                   <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4" />
                   <h2 className="text-2xl font-bold mb-1">Verify OTP</h2>
-                  <p className="text-gray-600">Enter the 4-digit code sent to<br /><span className="font-medium">+91 {mobile}</span></p>
+                  <p className="text-gray-600">Enter the 4-digit code sent to<br /><span className="font-medium">{formatMobileForDisplay(mobile, countryCode)}</span></p>
                 </div>
 
                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-5 text-center">

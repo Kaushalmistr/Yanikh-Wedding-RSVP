@@ -15,6 +15,7 @@ export interface Guest {
   
   // Guest Details
   name: string;
+  countryCode?: string; // Country code for mobile number (e.g., 'IN', 'US')
   mobile: string;
   email: string;
   city: string;
@@ -33,6 +34,7 @@ export interface Guest {
     age: number;
     gender: 'Male' | 'Female' | 'Other';
     relation: string;
+    countryCode: string; // Country code for mobile number
     mobile: string;
     email: string;
     // Travel Details
@@ -41,6 +43,7 @@ export interface Guest {
     ticketFile?: File | null;
     // Government ID
     govIdType?: string;
+    govIdNumber?: string;
     govIdFile?: File | null;
   }>;
   
@@ -99,6 +102,10 @@ export interface Guest {
 
   // Source Indicator
   uploadSource?: 'RSVP' | 'BulkUpload';
+  
+  // WhatsApp Notification
+  whatsappStatus?: 'Pending' | 'Success' | 'Failed' | 'Not Sent';
+  whatsappSentAt?: string;
 }
 
 export interface WeddingEvent {
@@ -260,6 +267,50 @@ export function addGuestsBulk(guestList: Omit<Guest, 'id' | 'submittedAt'>[]): G
   guests.push(...newGuests);
   setItem('wedding_guests', guests);
   return newGuests;
+}
+
+/**
+ * Add guests in bulk with WhatsApp messaging
+ * @param guestList - List of guests to add
+ * @param eventId - Event ID for WhatsApp messaging
+ * @param sendWhatsApp - Whether to send WhatsApp messages
+ * @returns Array of added guests
+ */
+export function addGuestsBulkWithWhatsApp(
+  guestList: Omit<Guest, 'id' | 'submittedAt'>[],
+  eventId: string,
+  sendWhatsApp: boolean = true
+): Guest[] {
+  const guests = getGuests();
+  const newGuests: Guest[] = guestList.map(g => ({
+    ...g,
+    id: uuidv4(),
+    submittedAt: new Date().toISOString(),
+    whatsappStatus: sendWhatsApp ? 'Not Sent' : undefined,
+  }));
+  guests.push(...newGuests);
+  setItem('wedding_guests', guests);
+  return newGuests;
+}
+
+/**
+ * Update guest WhatsApp status
+ * @param guestId - Guest ID
+ * @param status - WhatsApp status
+ * @param sentAt - Timestamp when message was sent
+ */
+export function updateGuestWhatsAppStatus(
+  guestId: string,
+  status: 'Pending' | 'Success' | 'Failed' | 'Not Sent',
+  sentAt?: string
+): void {
+  const guests = getGuests();
+  const guest = guests.find(g => g.id === guestId);
+  if (guest) {
+    guest.whatsappStatus = status;
+    guest.whatsappSentAt = sentAt || new Date().toISOString();
+    setItem('wedding_guests', guests);
+  }
 }
 
 /**

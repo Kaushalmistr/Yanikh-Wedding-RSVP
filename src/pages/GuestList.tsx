@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getGuestsByEvent, createMessage, type WeddingEvent, type Guest } from '../lib/db';
 import { Heart, Search, ChevronDown, ChevronRight, Filter, Download, Users, Plus, Trash2, FileText, X, Send, MessageCircle } from 'lucide-react';
+import { Fragment } from 'react';
 
 export default function GuestList() {
   const { id } = useParams<{ id: string }>();
@@ -186,7 +187,7 @@ export default function GuestList() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-rose-50/30 to-pink-50/30">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-rose-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/dashboard" className="flex items-center gap-2">
               <Heart className="w-7 h-7 text-rose-500" fill="currentColor" />
@@ -215,7 +216,7 @@ export default function GuestList() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10">
+      <main className="w-full px-8 py-10">
         {/* Page Title & Stats */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Guest List</h1>
@@ -367,11 +368,26 @@ export default function GuestList() {
               <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '8%' }} />
+                </colgroup>
+                <thead className="bg-gray-50 border-b-2 border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left w-12">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       <input
                         type="checkbox"
                         checked={
@@ -381,37 +397,40 @@ export default function GuestList() {
                         className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       First Name
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Last Name
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Phone Number
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Email Address
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Signed-In
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Sangeet
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Shaadi
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Tags
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       City
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900 whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Source
                     </th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap pr-8">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                      WhatsApp Status
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Actions
                     </th>
                   </tr>
@@ -424,7 +443,7 @@ export default function GuestList() {
                     const initials = (guest.name.split(' ')[0][0] + (guest.name.split(' ')[1]?.[0] || '')).toUpperCase();
 
                     return (
-                      <tbody key={guest.id}>
+                      <Fragment key={guest.id}>
                         {/* Main Row */}
                         <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3">
@@ -440,37 +459,37 @@ export default function GuestList() {
                               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
                                 {initials}
                               </div>
-                              <span className="text-gray-900 font-medium">{firstName}</span>
+                              <span className="text-gray-900 font-medium truncate">{firstName}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-700">
-                            <a href={`mailto:${guest.email}`} className="hover:text-rose-600 text-blue-600">
-                              {lastName}
-                            </a>
+                          <td className="px-4 py-3 text-gray-700 truncate">
+                            {lastName || '-'}
                           </td>
                           <td className="px-4 py-3 text-gray-600">{guest.mobile}</td>
-                          <td className="px-4 py-3 text-gray-600 truncate max-w-xs">{guest.email}</td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-gray-600">
+                            <a href={`mailto:${guest.email}`} className="hover:text-rose-600 text-blue-600 block truncate">
+                              {guest.email}
+                            </a>
+                          </td>
+                          <td className="px-4 py-3">
                             <input
                               type="checkbox"
-                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
+                              checked={guest.attendanceStatus === 'Yes'}
+                              readOnly
+                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-default pointer-events-none"
                             />
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            {guest.attendanceStatus === 'Yes' && (
-                              <span className="inline-flex items-center justify-center">
-                                <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">
-                                  ✓
-                                </span>
+                          <td className="px-4 py-3">
+                            {guest.functionAttendance?.['Sangeet'] === 'Yes' && (
+                              <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 inline-flex items-center justify-center text-xs font-bold">
+                                ✓
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            {guest.attendanceStatus === 'Yes' && (
-                              <span className="inline-flex items-center justify-center">
-                                <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">
-                                  ✓
-                                </span>
+                          <td className="px-4 py-3">
+                            {guest.functionAttendance?.['Wedding Ceremony'] === 'Yes' && (
+                              <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 inline-flex items-center justify-center text-xs font-bold">
+                                ✓
                               </span>
                             )}
                           </td>
@@ -486,9 +505,9 @@ export default function GuestList() {
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-600">{guest.city}</td>
+                          <td className="px-4 py-3 text-gray-600 truncate">{guest.city}</td>
                           <td className="px-4 py-3">
-                            <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium ${
+                            <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium whitespace-nowrap ${
                               guest.uploadSource === 'BulkUpload'
                                 ? 'bg-orange-100 text-orange-700'
                                 : 'bg-blue-100 text-blue-700'
@@ -496,24 +515,41 @@ export default function GuestList() {
                               {guest.uploadSource === 'BulkUpload' ? 'Uploaded' : 'RSVP Form'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="px-4 py-3">
+                            <span className={`inline-block px-2.5 py-1 rounded text-xs font-medium whitespace-nowrap ${
+                              guest.whatsappStatus === 'Success'
+                                ? 'bg-green-100 text-green-700'
+                                : guest.whatsappStatus === 'Failed'
+                                ? 'bg-red-100 text-red-700'
+                                : guest.whatsappStatus === 'Pending'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {guest.whatsappStatus === 'Success' ? '✓ Sent' : 
+                               guest.whatsappStatus === 'Failed' ? '✗ Failed' :
+                               guest.whatsappStatus === 'Pending' ? '⏳ Pending' :
+                               '— Not Sent'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
                               <button
                                 onClick={() => openMessageModal(guest)}
-                                className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-2 hover:bg-rose-50 rounded"
-                                title="Send message to this guest"
+                                className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-1.5 hover:bg-rose-50 rounded"
+                                title="Send message"
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => toggleGuestExpanded(guest.id)}
                                 className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-1 hover:bg-gray-100 rounded"
+                                title={guest.additionalGuests && guest.additionalGuests.length > 0 ? "Toggle details" : "Delete"}
                               >
                                 {guest.additionalGuests && guest.additionalGuests.length > 0 ? (
                                   isExpanded ? (
-                                    <ChevronDown className="w-5 h-5" />
+                                    <ChevronDown className="w-4 h-4" />
                                   ) : (
-                                    <ChevronRight className="w-5 h-5" />
+                                    <ChevronRight className="w-4 h-4" />
                                   )
                                 ) : (
                                   <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
@@ -526,7 +562,7 @@ export default function GuestList() {
                         {/* Expanded Details */}
                         {isExpanded && guest.additionalGuests && guest.additionalGuests.length > 0 && (
                           <tr className="bg-gray-50 border-b border-gray-100">
-                            <td colSpan={11} className="px-6 py-4">
+                            <td colSpan={13} className="px-6 py-4">
                               <div className="space-y-3">
                                 <h4 className="font-semibold text-gray-900 flex items-center gap-2">
                                   <Users className="w-4 h-4" /> Additional Guests ({guest.additionalGuests.length})
@@ -555,7 +591,7 @@ export default function GuestList() {
                             </td>
                           </tr>
                         )}
-                      </tbody>
+                      </Fragment>
                     );
                   })}
                 </tbody>

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getEvents, searchEvents, deleteEvent, getGuests, type WeddingEvent } from '../lib/db';
-import { Search, Plus, LogOut, Heart, Calendar, MapPin, Trash2, Eye, RefreshCw } from 'lucide-react';
+import { seedDummyData } from '../lib/seedData';
+import { Search, Plus, LogOut, Heart, Calendar, MapPin, Trash2, Eye, RefreshCw, Database } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -41,6 +42,14 @@ export default function Dashboard() {
     }
   };
 
+  const handleSeedDummyData = () => {
+    if (confirm('🌱 This will add 8 users, 7 events, 60+ guests, 15+ messages, and 5+ uploaded lists. Continue?')) {
+      seedDummyData();
+      loadEvents();
+      alert('✅ Dummy data added successfully! Check your dashboard.');
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -73,11 +82,19 @@ export default function Dashboard() {
               </span>
               
               <button
+                onClick={handleSeedDummyData}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all border border-emerald-200"
+              >
+                <Database className="w-4 h-4" />
+                <span className="hidden sm:inline">Seed Data</span>
+              </button>
+
+              <button
                 onClick={handleResetAllData}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded-xl transition-all border border-orange-200"
               >
                 <RefreshCw className="w-4 h-4" />
-                Reset Data
+                <span className="hidden sm:inline">Reset</span>
               </button>
 
               <button
@@ -85,7 +102,7 @@ export default function Dashboard() {
                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
               >
                 <LogOut className="w-4 h-4" />
-                Logout
+                <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
           </div>
