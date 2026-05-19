@@ -89,17 +89,28 @@ export function validateMobileNumber(mobile: string, countryCode: string): { isV
 }
 
 /**
+ * Get country display with flag and code
+ * @param countryCode - The country code
+ * @returns Display string like "🇮🇳 +91" or just "+91" if country not found
+ */
+export function getCountryDisplay(countryCode: string): string {
+  const country = COUNTRY_CODES.find(c => c.code === countryCode);
+  if (!country) return '';
+  return `${country.flag} ${country.dialCode}`;
+}
+
+/**
  * Format mobile number for display
  * @param mobile - The mobile number
  * @param countryCode - The country code
- * @returns Formatted mobile number with country dial code
+ * @returns Formatted mobile number with country dial code and flag
  */
 export function formatMobileForDisplay(mobile: string, countryCode: string): string {
   const country = COUNTRY_CODES.find(c => c.code === countryCode);
   if (!country) return mobile;
-  
+
   const cleanMobile = mobile.replace(/\D/g, '');
-  return `${country.dialCode} ${cleanMobile}`;
+  return `${country.flag} ${country.dialCode} ${cleanMobile}`;
 }
 
 /**

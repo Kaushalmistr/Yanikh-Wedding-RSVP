@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getGuestsByEvent, type WeddingEvent, type Guest } from '../lib/db';
 import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase } from 'lucide-react';
-import { DEFAULT_COVER_IMAGE } from '../lib/constants';
+import { DEFAULT_COVER_IMAGE, formatMobileForDisplay } from '../lib/constants';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -193,7 +193,7 @@ export default function EventDetail() {
                     <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 space-y-3 text-sm">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{guest.email}</span></div>
-                        <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{guest.mobile}</span></div>
+                        <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(guest.mobile, guest.countryCode || 'IN')}</span></div>
                         <div><span className="text-gray-600">Meal:</span> <span className="font-medium">{guest.mealPreference || '-'}</span></div>
                         <div><span className="text-gray-600">Accommodation:</span> <span className="font-medium">{guest.needsAccommodation ? 'Yes' : 'No'}</span></div>
                       </div>
@@ -216,7 +216,7 @@ export default function EventDetail() {
                             </div>
                             <div className="space-y-2 text-sm">
                               <div className="grid grid-cols-2 gap-4">
-                                <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{addGuest.mobile}</span></div>
+                                <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(addGuest.mobile, addGuest.countryCode || 'IN')}</span></div>
                                 <div><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{addGuest.email}</span></div>
                               </div>
                               {addGuest.travelMode && (
@@ -268,7 +268,7 @@ export default function EventDetail() {
                 <div>
                   <h4 className="font-semibold text-gray-500 mb-3">PERSONAL INFO</h4>
                   <p><strong>Email:</strong> {selectedGuest.email}</p>
-                  <p><strong>Mobile:</strong> {selectedGuest.mobile}</p>
+                  <p><strong>Mobile:</strong> {formatMobileForDisplay(selectedGuest.mobile, selectedGuest.countryCode || 'IN')}</p>
                   <p><strong>City:</strong> {selectedGuest.city}</p>
                 </div>
                 <div>
