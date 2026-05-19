@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getRecipientsForMessage, createMessage, getMessagesByEvent, deleteMessage, sendMessage, getGuestsByEvent, findGuestByNameOrEmail, createUploadedGuestList, getUploadedGuestListsByEvent, deleteUploadedGuestList, convertParsedGuestToGuest, addGuestsBulk, type WeddingEvent, type BulkMessage, type Guest } from '../lib/db';
 import { parseGuestListFile, generateSampleGuestListCSV, type ParsedGuestData } from '../lib/guestListParser';
+import { formatMobileForDisplay } from '../lib/constants';
 import { ArrowLeft, Send, Trash2, MessageSquare, Users, CheckCircle, Loader, Upload, Download, AlertCircle } from 'lucide-react';
 
 const FUNCTIONS = ['Welcome Lunch', 'Mehendi', 'Sangeet', 'Haldi', 'Wedding Ceremony', 'Reception', 'Farewell Brunch'];

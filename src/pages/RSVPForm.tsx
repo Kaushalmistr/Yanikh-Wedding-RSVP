@@ -8,6 +8,36 @@ const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
 const FUNCTIONS = ['Welcome Lunch', 'Mehendi', 'Sangeet', 'Haldi', 'Wedding Ceremony', 'Reception', 'Farewell Brunch'];
 
+/** Age 1–12 inclusive → Child; above 12 → Adult. Invalid/missing age returns null. */
+function guestAgeClassification(age: number): 'Child' | 'Adult' | null {
+  if (!Number.isFinite(age) || age < 1) return null;
+  return age <= 12 ? 'Child' : 'Adult';
+}
+
+function hasMainFlightTravelReady(fd: {
+  personalTravelMode: string;
+  flightPnr: string;
+  flightTicket: File | null;
+}): boolean {
+  return (
+    fd.personalTravelMode === 'By Flight' &&
+    validateFlightPNR(fd.flightPnr).isValid &&
+    !!fd.flightTicket
+  );
+}
+
+function hasMainTrainTravelReady(fd: {
+  personalTravelMode: string;
+  trainPnr: string;
+  trainTicket: File | null;
+}): boolean {
+  return (
+    fd.personalTravelMode === 'By Train' &&
+    validateTrainPNR(fd.trainPnr).isValid &&
+    !!fd.trainTicket
+  );
+}
+
 export default function RSVPForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -27,7 +57,22 @@ export default function RSVPForm() {
     respondingFor: 'Self' as 'Self' | 'Couple' | 'Family',
     attendanceStatus: 'Yes' as 'Yes' | 'Maybe' | 'Cannot attend',
     functionAttendance: {} as Record<string, 'Yes' | 'No'>,
-    additionalGuests: [] as Array<{ name: string; age: number; gender: 'Male' | 'Female' | 'Other'; relation: string; countryCode: string; mobile: string; email: string; travelMode?: string; ticketFile?: File | null; pnrNumber?: string; govIdType?: string; govIdNumber?: string; govIdFile?: File | null }>,
+    additionalGuests: [] as Array<{
+      name: string;
+      age: number;
+      gender: 'Male' | 'Female' | 'Other';
+      relation: string;
+      countryCode: string;
+      mobile: string;
+      email: string;
+      travelMode?: string;
+      travelSameAsMain?: 'flight' | 'train' | null;
+      ticketFile?: File | null;
+      pnrNumber?: string;
+      govIdType?: string;
+      govIdNumber?: string;
+      govIdFile?: File | null;
+    }>,
     needsAccommodation: false,
     checkInDate: '',
     checkOutDate: '',
@@ -61,6 +106,7 @@ export default function RSVPForm() {
     mobile: string;
     email: string;
     travelMode: string;
+    travelSameAsMain: 'flight' | 'train' | null;
     ticketFile: File | null;
     pnrNumber: string;
     govIdType: string;
@@ -75,6 +121,7 @@ export default function RSVPForm() {
     mobile: '',
     email: '',
     travelMode: '',
+    travelSameAsMain: null,
     ticketFile: null,
     pnrNumber: '',
     govIdType: '',
@@ -96,6 +143,53 @@ export default function RSVPForm() {
       updateForm('mobile', formData.mobile.slice(0, country.digitCount));
     }
   }, [formData.countryCode]);
+
+  // Keep additional-guest draft in sync when "same as main" is selected and main travel changes
+  useEffect(() => {
+    setNewGuest((prev) => {
+      if (prev.travelSameAsMain === 'flight') {
+        if (!hasMainFlightTravelReady(formData)) {
+          return {
+            ...prev,
+            travelSameAsMain: null,
+            travelMode: '',
+            pnrNumber: '',
+            ticketFile: null,
+          };
+        }
+        return {
+          ...prev,
+          travelMode: 'By Flight',
+          pnrNumber: formData.flightPnr,
+          ticketFile: formData.flightTicket,
+        };
+      }
+      if (prev.travelSameAsMain === 'train') {
+        if (!hasMainTrainTravelReady(formData)) {
+          return {
+            ...prev,
+            travelSameAsMain: null,
+            travelMode: '',
+            pnrNumber: '',
+            ticketFile: null,
+          };
+        }
+        return {
+          ...prev,
+          travelMode: 'By Train',
+          pnrNumber: formData.trainPnr,
+          ticketFile: formData.trainTicket,
+        };
+      }
+      return prev;
+    });
+  }, [
+    formData.personalTravelMode,
+    formData.flightPnr,
+    formData.flightTicket,
+    formData.trainPnr,
+    formData.trainTicket,
+  ]);
 
   const updateForm = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
@@ -156,6 +250,11 @@ export default function RSVPForm() {
       setError('Please fill all guest details (Name, Relation, Mobile, Email)');
       return;
     }
+
+    if (!Number.isFinite(newGuest.age) || newGuest.age < 1) {
+      setError('Please enter a valid guest age');
+      return;
+    }
     
     // Validate mobile number for additional guest
     const mobileValidation = validateMobileNumber(newGuest.mobile, newGuest.countryCode);
@@ -170,10 +269,29 @@ export default function RSVPForm() {
       setError(emailValidation.error || 'Invalid email address');
       return;
     }
-    
-    setFormData(prev => ({
+
+    let guestToAdd = { ...newGuest };
+    if (guestToAdd.travelSameAsMain === 'flight' && hasMainFlightTravelReady(formData)) {
+      Object.assign(guestToAdd, {
+        travelMode: 'By Flight',
+        pnrNumber: formData.flightPnr,
+        ticketFile: formData.flightTicket,
+        travelSameAsMain: 'flight' as const,
+      });
+    } else if (guestToAdd.travelSameAsMain === 'train' && hasMainTrainTravelReady(formData)) {
+      Object.assign(guestToAdd, {
+        travelMode: 'By Train',
+        pnrNumber: formData.trainPnr,
+        ticketFile: formData.trainTicket,
+        travelSameAsMain: 'train' as const,
+      });
+    } else {
+      guestToAdd.travelSameAsMain = null;
+    }
+
+    setFormData((prev) => ({
       ...prev,
-      additionalGuests: [...prev.additionalGuests, { ...newGuest }]
+      additionalGuests: [...prev.additionalGuests, guestToAdd],
     }));
     setNewGuest({ 
       name: '', 
@@ -184,6 +302,7 @@ export default function RSVPForm() {
       mobile: '',
       email: '',
       travelMode: '',
+      travelSameAsMain: null,
       ticketFile: null,
       pnrNumber: '',
       govIdType: '',
@@ -228,6 +347,15 @@ export default function RSVPForm() {
         return false;
       }
     }
+    if (step === 3) {
+      const invalidAge = formData.additionalGuests.some(
+        (g) => !Number.isFinite(g.age) || g.age < 1
+      );
+      if (invalidAge) {
+        setError('Each added guest must have a valid age (Child: 1–12 years, Adult: 13+ years)');
+        return false;
+      }
+    }
     if (step === 4) {
       if (!formData.infoAccurate || !formData.dataConsent) {
         setError('Please confirm the declaration');
@@ -245,6 +373,9 @@ export default function RSVPForm() {
     e.preventDefault();
     if (!validateStep() || !id) return;
 
+    const additionalAdults = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Adult').length;
+    const additionalChildren = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Child').length;
+
     addGuest({
       eventId: id,
       name: formData.name,
@@ -254,8 +385,8 @@ export default function RSVPForm() {
       respondingFor: formData.respondingFor,
       attendanceStatus: formData.attendanceStatus,
       functionAttendance: formData.functionAttendance,
-      adults: 1,
-      children: 0,
+      adults: 1 + additionalAdults,
+      children: additionalChildren,
       infants: 0,
       additionalGuests: formData.additionalGuests,
       needsAccommodation: formData.needsAccommodation,
@@ -349,7 +480,7 @@ export default function RSVPForm() {
                       <div key={idx} className="bg-blue-50 p-6 rounded-2xl border border-blue-200">
                         <h4 className="font-bold text-lg mb-4 text-gray-900">Guest {idx + 1}: {guest.name}</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div><p className="text-sm text-gray-500">Age</p><p className="font-semibold">{guest.age} years</p></div>
+                          <div><p className="text-sm text-gray-500">Age</p><p className="font-semibold">{guest.age} years{guestAgeClassification(guest.age) ? ` (${guestAgeClassification(guest.age)})` : ''}</p></div>
                           <div><p className="text-sm text-gray-500">Gender</p><p className="font-semibold">{guest.gender}</p></div>
                           <div><p className="text-sm text-gray-500">Relation</p><p className="font-semibold">{guest.relation}</p></div>
                           <div><p className="text-sm text-gray-500">Mobile</p><p className="font-semibold">{formatMobileForDisplay(guest.mobile, guest.countryCode)}</p></div>
@@ -357,7 +488,20 @@ export default function RSVPForm() {
                           {guest.travelMode && (
                             <div className="md:col-span-2">
                               <p className="text-sm text-gray-500">Travel</p>
-                              <p className="font-semibold">{guest.travelMode} {guest.pnrNumber && `(PNR: ${guest.pnrNumber})`}</p>
+                              <p className="font-semibold">
+                                {guest.travelMode}
+                                {guest.pnrNumber && ` (PNR: ${guest.pnrNumber})`}
+                              </p>
+                              {(guest.travelSameAsMain === 'flight' || guest.travelSameAsMain === 'train') && (
+                                <p className="text-xs font-medium text-blue-800 mt-1">
+                                  Same {guest.travelSameAsMain === 'flight' ? 'flight' : 'train'} details as main guest
+                                </p>
+                              )}
+                              {guest.ticketFile && (
+                                <p className="text-xs text-gray-600 mt-1 truncate" title={guest.ticketFile.name}>
+                                  Ticket: {guest.ticketFile.name}
+                                </p>
+                              )}
                             </div>
                           )}
                           {guest.govIdType && (
@@ -467,7 +611,7 @@ export default function RSVPForm() {
                     >
                       {COUNTRY_CODES.map(country => (
                         <option key={country.code} value={country.code}>
-                          {country.flag} {country.dialCode} {country.name}
+                          {country.flag} {country.dialCode}
                         </option>
                       ))}
                     </select>
@@ -524,7 +668,6 @@ export default function RSVPForm() {
                     </div>
                   </div>
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium mb-2">Email Address *</label>
                   <input 
@@ -1032,7 +1175,12 @@ export default function RSVPForm() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold text-gray-900 text-lg">{g.name}</div>
-                            <div className="text-sm text-gray-500">{g.relation} • {g.age} yrs • {g.gender}</div>
+                            <div className="text-sm text-gray-500">
+                              {g.relation} • {g.age} yrs • {g.gender}
+                              {guestAgeClassification(g.age) && (
+                                <span className="text-rose-600 font-medium"> • {guestAgeClassification(g.age)}</span>
+                              )}
+                            </div>
                           </div>
                           <button 
                             onClick={(e) => {
@@ -1054,7 +1202,13 @@ export default function RSVPForm() {
                                 <User className="w-4 h-4" /> Personal Information
                               </h5>
                               <div className="grid grid-cols-2 gap-3 ml-6 text-sm">
-                                <div><span className="text-gray-600">Age:</span> <span className="font-medium">{g.age} years</span></div>
+                                <div>
+                                  <span className="text-gray-600">Age:</span>{' '}
+                                  <span className="font-medium">{g.age} years</span>
+                                  {guestAgeClassification(g.age) && (
+                                    <span className="ml-2 text-rose-600 font-semibold">({guestAgeClassification(g.age)})</span>
+                                  )}
+                                </div>
                                 <div><span className="text-gray-600">Gender:</span> <span className="font-medium">{g.gender}</span></div>
                                 <div className="col-span-2"><span className="text-gray-600">Relation:</span> <span className="font-medium">{g.relation}</span></div>
                                 <div className="col-span-2"><span className="text-gray-600">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(g.mobile, g.countryCode)}</span></div>
@@ -1069,10 +1223,28 @@ export default function RSVPForm() {
                                   {g.travelMode === 'By Flight' ? <Plane className="w-4 h-4" /> : g.travelMode === 'By Train' ? <Train className="w-4 h-4" /> : <Briefcase className="w-4 h-4" />}
                                   Travel Details
                                 </h5>
+                                {(g.travelSameAsMain === 'flight' || g.travelSameAsMain === 'train') && (
+                                  <p className="text-xs font-medium text-blue-800 mb-2 ml-6">
+                                    Same as main guest — {g.travelSameAsMain === 'flight' ? 'flight' : 'train'} booking
+                                  </p>
+                                )}
                                 <div className="grid grid-cols-2 gap-3 ml-6 text-sm">
                                   <div><span className="text-gray-600">Mode:</span> <span className="font-medium">{g.travelMode}</span></div>
-                                  {g.pnrNumber && <div><span className="text-gray-600">PNR Number:</span> <span className="font-medium">{g.pnrNumber}</span></div>}
-                                  {g.ticketFile && <div className="col-span-2"><span className="text-gray-600">Ticket:</span> <span className="font-medium text-green-600">✓ Uploaded</span></div>}
+                                  {g.pnrNumber && (
+                                    <div>
+                                      <span className="text-gray-600">PNR Number:</span>{' '}
+                                      <span className="font-medium font-mono">{g.pnrNumber}</span>
+                                    </div>
+                                  )}
+                                  {g.ticketFile && (
+                                    <div className="col-span-2">
+                                      <span className="text-gray-600">Ticket:</span>{' '}
+                                      <span className="font-medium text-green-600">✓ Uploaded</span>
+                                      <span className="block text-xs text-gray-500 truncate mt-0.5" title={g.ticketFile.name}>
+                                        {g.ticketFile.name}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1104,7 +1276,29 @@ export default function RSVPForm() {
                     <h5 className="text-sm font-medium text-gray-600 mb-4">Basic Information</h5>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <input type="text" placeholder="Guest Name *" value={newGuest.name} onChange={e => setNewGuest(g => ({...g, name: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
-                      <input type="number" placeholder="Age" value={newGuest.age || ''} onChange={e => setNewGuest(g => ({...g, age: parseInt(e.target.value) || 0}))} className="px-5 py-4 border rounded-2xl" />
+                      <div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          placeholder="Age *"
+                          value={newGuest.age || ''}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            const parsed = parseInt(raw, 10);
+                            setNewGuest(g => ({ ...g, age: Number.isFinite(parsed) && parsed > 0 ? parsed : 0 }));
+                          }}
+                          className="w-full px-5 py-4 border rounded-2xl"
+                        />
+                        {guestAgeClassification(newGuest.age) && (
+                          <p className="text-xs mt-2 font-semibold text-rose-600">
+                            Classified as {guestAgeClassification(newGuest.age)}
+                          </p>
+                        )}
+                        {newGuest.age === 0 && (
+                          <p className="text-xs mt-2 text-gray-500">Enter age to classify as Child (1–12) or Adult (13+)</p>
+                        )}
+                      </div>
                       <select value={newGuest.gender} onChange={e => setNewGuest(g => ({...g, gender: e.target.value as 'Male' | 'Female' | 'Other'}))} className="px-5 py-4 border rounded-2xl">
                         <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
                       </select>
@@ -1200,157 +1394,328 @@ export default function RSVPForm() {
 
                   {/* Travel Info */}
                   <div className="mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-200">
-                    <h5 className="text-sm font-medium text-gray-600 mb-4">Travel Details (Optional)</h5>
-                    <div className="mb-4">
-                      <label className="block text-xs font-medium text-gray-600 mb-2">Mode of Travel</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {TRAVEL_MODES.map(mode => (
-                          <button key={mode} type="button" onClick={() => setNewGuest(g => ({...g, travelMode: mode}))}
-                            className={`py-2 px-3 text-sm rounded-xl border transition-all ${newGuest.travelMode === mode ? 'border-blue-500 bg-white font-medium' : 'border-gray-300 hover:border-gray-400'}`}>
-                            {mode}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {newGuest.travelMode === 'By Flight' && (
-                      <div className="bg-white p-4 rounded-xl border border-gray-200">
-                        <label className="block text-xs font-medium text-gray-600 mb-2">Flight PNR Number</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g., ABC123" 
-                          value={newGuest.pnrNumber || ''} 
-                          onChange={e => {
-                            const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
-                            setNewGuest(g => ({...g, pnrNumber: value}));
-                          }}
-                          maxLength={6}
-                          className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
-                            newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid
-                              ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
-                              : newGuest.pnrNumber && validateFlightPNR(newGuest.pnrNumber).isValid
-                              ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
-                              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-                          }`}
-                        />
-                        {newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid && (
-                          <p className="text-xs text-red-600 mb-3 -mt-2">{validateFlightPNR(newGuest.pnrNumber).error}</p>
-                        )}
-                        <label className="block text-xs font-medium mb-2">Upload Ticket</label>
-                        {!newGuest.ticketFile ? (
-                          <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
-                            <Upload className="w-5 h-5 text-gray-400" />
-                            <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
-                            <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf" 
-                              onChange={(e) => {
-                                const file = e.target.files?.[0] || null;
-                                if (file && validateFileType(file)) {
-                                  setNewGuest(g => ({...g, ticketFile: file}));
-                                } else if (file) {
-                                  e.target.value = '';
-                                }
-                              }} 
-                            />
-                          </label>
-                        ) : (
-                          <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <File className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
-                                  <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setNewGuest(g => ({...g, ticketFile: null}))}
-                                className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
-                                title="Remove"
-                              >
-                                <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
-                              </button>
-                            </div>
-                            <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3" /> Uploaded
-                            </p>
-                          </div>
-                        )}
+                    <h5 className="text-sm font-medium text-gray-600 mb-2">Travel Details (Optional)</h5>
+                    <p className="text-xs text-gray-500 mb-4">
+                      If they travel with you on the same booking, reuse the main guest&apos;s flight or train details from step 1.
+                    </p>
+
+                    {(hasMainFlightTravelReady(formData) || hasMainTrainTravelReady(formData)) && (
+                      <div className="mb-4">
+                        <p className="text-xs font-semibold text-gray-700 mb-2">Same as main guest</p>
+                        <div className="flex flex-wrap gap-2">
+                          {hasMainFlightTravelReady(formData) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewGuest((g) => ({
+                                  ...g,
+                                  travelSameAsMain: 'flight',
+                                  travelMode: 'By Flight',
+                                  pnrNumber: formData.flightPnr,
+                                  ticketFile: formData.flightTicket,
+                                }))
+                              }
+                              className={`px-3 py-2 text-xs font-medium rounded-xl border transition-all flex items-center gap-1.5 ${
+                                newGuest.travelSameAsMain === 'flight'
+                                  ? 'border-blue-600 bg-white text-blue-800 shadow-sm'
+                                  : 'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-400'
+                              }`}
+                            >
+                              <Plane className="w-3.5 h-3.5" />
+                              Same Flight Details
+                            </button>
+                          )}
+                          {hasMainTrainTravelReady(formData) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewGuest((g) => ({
+                                  ...g,
+                                  travelSameAsMain: 'train',
+                                  travelMode: 'By Train',
+                                  pnrNumber: formData.trainPnr,
+                                  ticketFile: formData.trainTicket,
+                                }))
+                              }
+                              className={`px-3 py-2 text-xs font-medium rounded-xl border transition-all flex items-center gap-1.5 ${
+                                newGuest.travelSameAsMain === 'train'
+                                  ? 'border-blue-600 bg-white text-blue-800 shadow-sm'
+                                  : 'border-blue-200 bg-white/80 text-blue-700 hover:border-blue-400'
+                              }`}
+                            >
+                              <Train className="w-3.5 h-3.5" />
+                              Same Train Details
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
 
-                    {newGuest.travelMode === 'By Train' && (
-                      <div className="bg-white p-4 rounded-xl border border-gray-200">
-                        <label className="block text-xs font-medium text-gray-600 mb-2">Train PNR Number</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g., 1234567890" 
-                          value={newGuest.pnrNumber || ''} 
-                          onChange={e => {
-                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                            setNewGuest(g => ({...g, pnrNumber: value}));
-                          }}
-                          maxLength={10}
-                          className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
-                            newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid
-                              ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
-                              : newGuest.pnrNumber && validateTrainPNR(newGuest.pnrNumber).isValid
-                              ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
-                              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
-                          }`}
-                        />
-                        {newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid && (
-                          <p className="text-xs text-red-600 mb-3 -mt-2">{validateTrainPNR(newGuest.pnrNumber).error}</p>
-                        )}
-                        <label className="block text-xs font-medium mb-2">Upload Ticket</label>
-                        {!newGuest.ticketFile ? (
-                          <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
-                            <Upload className="w-5 h-5 text-gray-400" />
-                            <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
-                            <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf" 
-                              onChange={(e) => {
-                                const file = e.target.files?.[0] || null;
-                                if (file && validateFileType(file)) {
-                                  setNewGuest(g => ({...g, ticketFile: file}));
-                                } else if (file) {
-                                  e.target.value = '';
-                                }
-                              }} 
-                            />
-                          </label>
-                        ) : (
-                          <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <File className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
-                                  <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
-                                </div>
+                    {newGuest.travelSameAsMain === 'flight' && hasMainFlightTravelReady(formData) && (
+                      <div className="bg-white p-4 rounded-xl border border-blue-200 mb-4">
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                          <div>
+                            <p className="text-xs font-semibold text-blue-900">Using main guest&apos;s flight</p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">PNR and ticket stay in sync with step 1 until you add this guest.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewGuest((g) => ({
+                                ...g,
+                                travelSameAsMain: null,
+                                travelMode: '',
+                                pnrNumber: '',
+                                ticketFile: null,
+                              }))
+                            }
+                            className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded-lg hover:bg-rose-50"
+                          >
+                            Enter different travel
+                          </button>
+                        </div>
+                        <div className="grid gap-2 text-sm">
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <Plane className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                            <span>
+                              <span className="text-gray-500">PNR:</span>{' '}
+                              <span className="font-mono font-semibold">{formData.flightPnr}</span>
+                            </span>
+                          </div>
+                          {formData.flightTicket && (
+                            <div className="border border-green-200 bg-green-50 rounded-lg p-3 flex items-start gap-2">
+                              <File className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-gray-900 truncate">{formData.flightTicket.name}</p>
+                                <p className="text-[10px] text-gray-500">{(formData.flightTicket.size / 1024).toFixed(1)} KB</p>
+                                <p className="text-green-700 text-xs mt-1 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Same ticket as main guest
+                                </p>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setNewGuest(g => ({...g, ticketFile: null}))}
-                                className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
-                                title="Remove"
-                              >
-                                <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
-                              </button>
                             </div>
-                            <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3" /> Uploaded
-                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {newGuest.travelSameAsMain === 'train' && hasMainTrainTravelReady(formData) && (
+                      <div className="bg-white p-4 rounded-xl border border-blue-200 mb-4">
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                          <div>
+                            <p className="text-xs font-semibold text-blue-900">Using main guest&apos;s train</p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">PNR and ticket stay in sync with step 1 until you add this guest.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewGuest((g) => ({
+                                ...g,
+                                travelSameAsMain: null,
+                                travelMode: '',
+                                pnrNumber: '',
+                                ticketFile: null,
+                              }))
+                            }
+                            className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2 py-1 rounded-lg hover:bg-rose-50"
+                          >
+                            Enter different travel
+                          </button>
+                        </div>
+                        <div className="grid gap-2 text-sm">
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <Train className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                            <span>
+                              <span className="text-gray-500">PNR:</span>{' '}
+                              <span className="font-mono font-semibold">{formData.trainPnr}</span>
+                            </span>
+                          </div>
+                          {formData.trainTicket && (
+                            <div className="border border-green-200 bg-green-50 rounded-lg p-3 flex items-start gap-2">
+                              <File className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-gray-900 truncate">{formData.trainTicket.name}</p>
+                                <p className="text-[10px] text-gray-500">{(formData.trainTicket.size / 1024).toFixed(1)} KB</p>
+                                <p className="text-green-700 text-xs mt-1 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Same ticket as main guest
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {!newGuest.travelSameAsMain && (
+                      <>
+                        <div className="mb-4">
+                          <label className="block text-xs font-medium text-gray-600 mb-2">Mode of Travel</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {TRAVEL_MODES.map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() =>
+                                  setNewGuest((g) => {
+                                    if (g.travelMode === mode && !g.travelSameAsMain) return g;
+                                    return {
+                                      ...g,
+                                      travelSameAsMain: null,
+                                      travelMode: mode,
+                                      pnrNumber: '',
+                                      ticketFile: null,
+                                    };
+                                  })
+                                }
+                                className={`py-2 px-3 text-sm rounded-xl border transition-all ${
+                                  newGuest.travelMode === mode ? 'border-blue-500 bg-white font-medium' : 'border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {newGuest.travelMode === 'By Flight' && (
+                          <div className="bg-white p-4 rounded-xl border border-gray-200">
+                            <label className="block text-xs font-medium text-gray-600 mb-2">Flight PNR Number</label>
+                            <input
+                              type="text"
+                              placeholder="e.g., ABC123"
+                              value={newGuest.pnrNumber || ''}
+                              onChange={(e) => {
+                                const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+                                setNewGuest((g) => ({ ...g, pnrNumber: value }));
+                              }}
+                              maxLength={6}
+                              className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
+                                newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid
+                                  ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                                  : newGuest.pnrNumber && validateFlightPNR(newGuest.pnrNumber).isValid
+                                    ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                                    : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                              }`}
+                            />
+                            {newGuest.pnrNumber && !validateFlightPNR(newGuest.pnrNumber).isValid && (
+                              <p className="text-xs text-red-600 mb-3 -mt-2">{validateFlightPNR(newGuest.pnrNumber).error}</p>
+                            )}
+                            <label className="block text-xs font-medium mb-2">Upload Ticket</label>
+                            {!newGuest.ticketFile ? (
+                              <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                                <Upload className="w-5 h-5 text-gray-400" />
+                                <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
+                                <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    if (file && validateFileType(file)) {
+                                      setNewGuest((g) => ({ ...g, ticketFile: file }));
+                                    } else if (file) {
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                />
+                              </label>
+                            ) : (
+                              <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <File className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
+                                      <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewGuest((g) => ({ ...g, ticketFile: null }))}
+                                    className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
+                                    title="Remove"
+                                  >
+                                    <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
+                                  </button>
+                                </div>
+                                <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Uploaded
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
+
+                        {newGuest.travelMode === 'By Train' && (
+                          <div className="bg-white p-4 rounded-xl border border-gray-200">
+                            <label className="block text-xs font-medium text-gray-600 mb-2">Train PNR Number</label>
+                            <input
+                              type="text"
+                              placeholder="e.g., 1234567890"
+                              value={newGuest.pnrNumber || ''}
+                              onChange={(e) => {
+                                const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                setNewGuest((g) => ({ ...g, pnrNumber: value }));
+                              }}
+                              maxLength={10}
+                              className={`w-full px-3 py-2 border rounded-lg mb-3 text-sm ${
+                                newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid
+                                  ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
+                                  : newGuest.pnrNumber && validateTrainPNR(newGuest.pnrNumber).isValid
+                                    ? 'border-green-300 focus:border-green-500 focus:ring-green-200'
+                                    : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                              }`}
+                            />
+                            {newGuest.pnrNumber && !validateTrainPNR(newGuest.pnrNumber).isValid && (
+                              <p className="text-xs text-red-600 mb-3 -mt-2">{validateTrainPNR(newGuest.pnrNumber).error}</p>
+                            )}
+                            <label className="block text-xs font-medium mb-2">Upload Ticket</label>
+                            {!newGuest.ticketFile ? (
+                              <label className="border-2 border-dashed border-gray-300 rounded-lg p-3 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors">
+                                <Upload className="w-5 h-5 text-gray-400" />
+                                <span className="text-xs mt-1 text-gray-600">Upload Ticket</span>
+                                <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, PDF</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    if (file && validateFileType(file)) {
+                                      setNewGuest((g) => ({ ...g, ticketFile: file }));
+                                    } else if (file) {
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                />
+                              </label>
+                            ) : (
+                              <div className="border-2 border-green-300 bg-green-50 rounded-lg p-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <File className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-gray-900 truncate">{newGuest.ticketFile.name}</p>
+                                      <p className="text-[10px] text-gray-500">{(newGuest.ticketFile.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewGuest((g) => ({ ...g, ticketFile: null }))}
+                                    className="ml-2 p-1 hover:bg-red-100 rounded transition-colors group"
+                                    title="Remove"
+                                  >
+                                    <X className="w-3 h-3 text-gray-400 group-hover:text-red-600" />
+                                  </button>
+                                </div>
+                                <p className="text-green-600 text-xs mt-1.5 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Uploaded
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 

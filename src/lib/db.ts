@@ -39,6 +39,8 @@ export interface Guest {
     email: string;
     // Travel Details
     travelMode?: string;
+    /** Copied from main guest flight/train at save time; optional for display. */
+    travelSameAsMain?: 'flight' | 'train' | null;
     pnrNumber?: string;
     ticketFile?: File | null;
     // Government ID
@@ -101,7 +103,7 @@ export interface Guest {
   submittedAt: string;
 
   // Source Indicator
-  uploadSource?: 'RSVP' | 'BulkUpload';
+  uploadSource?: 'RSVP' | 'BulkUpload' | 'Manual';
   
   // WhatsApp Notification
   whatsappStatus?: 'Pending' | 'Success' | 'Failed' | 'Not Sent';
@@ -255,6 +257,28 @@ export function addGuest(guest: Omit<Guest, 'id' | 'submittedAt'>): Guest {
   guests.push(newGuest);
   setItem('wedding_guests', guests);
   return newGuest;
+}
+
+export function updateGuest(id: string, updates: Partial<Guest>): Guest | null {
+  const guests = getGuests();
+  const index = guests.findIndex((g) => g.id === id);
+  if (index === -1) return null;
+
+  guests[index] = { ...guests[index], ...updates };
+  setItem('wedding_guests', guests);
+  return guests[index];
+}
+
+export function deleteGuest(id: string): void {
+  const guests = getGuests().filter((g) => g.id !== id);
+  setItem('wedding_guests', guests);
+}
+
+export function deleteGuests(ids: string[]): void {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  const guests = getGuests().filter((g) => !idSet.has(g.id));
+  setItem('wedding_guests', guests);
 }
 
 export function addGuestsBulk(guestList: Omit<Guest, 'id' | 'submittedAt'>[]): Guest[] {

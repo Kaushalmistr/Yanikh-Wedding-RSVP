@@ -596,9 +596,16 @@ Message History Tab:
 - Track upload history with processing statistics
 - Download CSV template for proper file format
 
-### 6. Guest Management
+### 6. Guest Management & Deletion
 - View all RSVPs for an event
 - Full-width guest list table
+- **Single guest deletion** with delete button in each row
+- **Bulk deletion** with checkboxes for multiple guests
+- **Delete additional guests** individually from expanded guest sections
+- **Confirmation popup** before deleting single or multiple guests
+- **Toast notifications** for successful/failed deletions
+- **Loading states** during deletion operations
+- **Auto-clear selection** when filters or search changes
 - Export guest data to Excel (.xlsx)
 - View detailed guest information
 - Filter by various criteria
@@ -1313,8 +1320,19 @@ All input fields implement real-time character filtering to prevent invalid inpu
     - Inline error messages
     - Success indicators on uploads
 
+- **v1.2** - Guest Management & Deletion (May 18, 2026)
+  - **Single guest deletion** with delete button in each guest row
+  - **Bulk delete functionality** with checkboxes for multiple guest selection
+  - **Delete additional guests** individually from expanded guest sections
+  - **Confirmation modal** before deleting single or multiple guests
+  - **Toast notifications** for successful/failed deletions (auto-dismiss after 4 seconds)
+  - **Loading states** during deletion with spinner and disabled buttons
+  - **Error handling** with user-friendly error messages
+  - **Auto-clear selection** when filters or search criteria changes
+  - **Instant guest list updates** after successful deletion
+
 ---
 
-**Last Updated:** May 17, 2026  
+**Last Updated:** May 18, 2026  
 **Maintainers:** [Project Team]  
 **Repository:** Yanikh-Wedding-RSVP
