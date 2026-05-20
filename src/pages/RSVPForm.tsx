@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
 import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
+import CountryCodeSelect from '../utils/CountryCodeSelect';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
@@ -604,17 +605,11 @@ export default function RSVPForm() {
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Mobile Number *</label>
                   <div className="flex gap-3">
-                    <select 
+                    <CountryCodeSelect 
                       value={formData.countryCode} 
-                      onChange={e => updateForm('countryCode', e.target.value)} 
-                      className="px-4 py-4 border rounded-2xl bg-white min-w-[200px]"
-                    >
-                      {COUNTRY_CODES.map(country => (
-                        <option key={country.code} value={country.code}>
-                          {country.flag} {country.dialCode}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={e => updateForm('countryCode', e)} 
+                      className="min-w-[200px]"
+                    />
                     <div className="flex-1">
                       <input 
                         type="tel" 
@@ -1314,17 +1309,11 @@ export default function RSVPForm() {
                     <div className="mb-4">
                       <label className="block text-xs font-medium text-gray-600 mb-2">Mobile Number *</label>
                       <div className="flex gap-3">
-                        <select 
+                        <CountryCodeSelect 
                           value={newGuest.countryCode} 
-                          onChange={e => setNewGuest(g => ({...g, countryCode: e.target.value}))} 
-                          className="px-3 py-4 border rounded-2xl bg-white text-sm min-w-[180px]"
-                        >
-                          {COUNTRY_CODES.map(country => (
-                            <option key={country.code} value={country.code}>
-                              {country.flag} {country.dialCode}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={e => setNewGuest(g => ({...g, countryCode: e}))} 
+                          className="min-w-[180px]"
+                        />
                         <div className="flex-1">
                           <input 
                             type="tel" 
