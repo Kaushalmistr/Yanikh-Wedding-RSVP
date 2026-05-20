@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
 import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
-import CountryCodeSelect from '../utils/CountryCodeSelect';
+import CountryCodeSelect from '../components/CountryCodeSelect';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
@@ -605,10 +605,9 @@ export default function RSVPForm() {
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Mobile Number *</label>
                   <div className="flex gap-3">
-                    <CountryCodeSelect 
-                      value={formData.countryCode} 
-                      onChange={e => updateForm('countryCode', e)} 
-                      className="min-w-[200px]"
+                    <CountryCodeSelect
+                      value={formData.countryCode}
+                      onChange={(newCountryCode) => updateForm('countryCode', newCountryCode)}
                     />
                     <div className="flex-1">
                       <input 
@@ -1309,10 +1308,9 @@ export default function RSVPForm() {
                     <div className="mb-4">
                       <label className="block text-xs font-medium text-gray-600 mb-2">Mobile Number *</label>
                       <div className="flex gap-3">
-                        <CountryCodeSelect 
-                          value={newGuest.countryCode} 
-                          onChange={e => setNewGuest(g => ({...g, countryCode: e}))} 
-                          className="min-w-[180px]"
+                        <CountryCodeSelect
+                          value={newGuest.countryCode}
+                          onChange={(newCountryCode) => setNewGuest(g => ({...g, countryCode: newCountryCode}))}
                         />
                         <div className="flex-1">
                           <input 

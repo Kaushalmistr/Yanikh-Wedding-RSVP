@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { createUser, findUserByMobile, generateOTP } from '../lib/db';
 import { Heart, Phone, Shield, User, Mail, Copy, CheckCircle } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail } from '../lib/constants';
+import CountryCodeSelect from '../components/CountryCodeSelect';
 
 type AuthMode = 'login' | 'signup' | 'otp';
 
@@ -189,24 +190,17 @@ export default function AuthPage() {
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
                   <div className="flex gap-2">
-                    <select
+                    <CountryCodeSelect
                       value={countryCode}
-                      onChange={(e) => {
-                        setCountryCode(e.target.value);
+                      onChange={(newCountryCode) => {
+                        setCountryCode(newCountryCode);
                         // Clear mobile if switching to a country with different length
-                        const newCountry = COUNTRY_CODES.find(c => c.code === e.target.value);
+                        const newCountry = COUNTRY_CODES.find(c => c.code === newCountryCode);
                         if (newCountry && mobile.length > newCountry.digitCount) {
                           setMobile(mobile.slice(0, newCountry.digitCount));
                         }
                       }}
-                      className="px-3 py-4 border border-gray-200 rounded-2xl bg-white text-sm min-w-[140px] focus:border-rose-500 focus:ring-rose-500 outline-none"
-                    >
-                      {COUNTRY_CODES.map(country => (
-                        <option key={country.code} value={country.code}>
-                          {country.flag} {country.dialCode}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <div className="flex-1 relative">
                       <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
                       <input
@@ -319,23 +313,16 @@ export default function AuthPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
                     <div className="flex gap-2">
-                      <select
+                      <CountryCodeSelect
                         value={countryCode}
-                        onChange={(e) => {
-                          setCountryCode(e.target.value);
-                          const newCountry = COUNTRY_CODES.find(c => c.code === e.target.value);
+                        onChange={(newCountryCode) => {
+                          setCountryCode(newCountryCode);
+                          const newCountry = COUNTRY_CODES.find(c => c.code === newCountryCode);
                           if (newCountry && mobile.length > newCountry.digitCount) {
                             setMobile(mobile.slice(0, newCountry.digitCount));
                           }
                         }}
-                        className="px-3 py-4 border border-gray-200 rounded-2xl bg-white text-sm min-w-[140px] focus:border-rose-500 outline-none"
-                      >
-                        {COUNTRY_CODES.map(country => (
-                          <option key={country.code} value={country.code}>
-                            {country.flag} {country.dialCode}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       <div className="flex-1 relative">
                         <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
                         <input
