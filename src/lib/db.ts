@@ -108,6 +108,22 @@ export interface Guest {
   // WhatsApp Notification
   whatsappStatus?: 'Pending' | 'Success' | 'Failed' | 'Not Sent';
   whatsappSentAt?: string;
+
+  // Documents
+  documents?: GuestDocument[];
+}
+
+export interface GuestDocument {
+  id: string;
+  fileName: string;
+  fileType: string; // MIME type
+  fileSize: number; // in bytes
+  base64Data: string; // base64 encoded file data
+  uploadedAt: string;
+  uploadedBy?: string; // 'guest' or 'admin'
+  guestId: string; // Main guest ID
+  relatedGuestId?: string; // For additional guests
+  description?: string;
 }
 
 export interface WeddingEvent {

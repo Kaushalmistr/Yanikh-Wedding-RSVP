@@ -4,6 +4,7 @@ import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
 import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 import CountryCodeSelect from '../components/CountryCodeSelect';
+import { createGuestDocument, type GuestDocument } from '../lib/documentService';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
@@ -96,6 +97,7 @@ export default function RSVPForm() {
     additionalNotes: '',
     infoAccurate: false,
     dataConsent: false,
+    uploadedDocuments: [] as File[], // General documents (passport, visa, etc.)
   });
 
   const [newGuest, setNewGuest] = useState<{ 
@@ -370,12 +372,23 @@ export default function RSVPForm() {
   const nextStep = () => { if (validateStep()) setStep(s => Math.min(s + 1, 4)); };
   const prevStep = () => { setStep(s => Math.max(s - 1, 1)); setError(''); };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep() || !id) return;
 
     const additionalAdults = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Adult').length;
     const additionalChildren = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Child').length;
+
+    // Convert uploaded documents to GuestDocument format
+    const documents: GuestDocument[] = [];
+    for (const file of formData.uploadedDocuments) {
+      try {
+        const doc = await createGuestDocument(file, '', 'guest'); // ID will be set after guest creation
+        documents.push(doc);
+      } catch (err) {
+        console.error('Failed to process document:', err);
+      }
+    }
 
     addGuest({
       eventId: id,
@@ -410,6 +423,7 @@ export default function RSVPForm() {
       needsDrop: false,
       transferPassengers: 0,
       transferBags: 0,
+      documents: documents.length > 0 ? documents : undefined,
     });
 
     setSuccess(true);
@@ -1897,9 +1911,87 @@ export default function RSVPForm() {
 
           {/* STEP 4: Confirmation */}
           {step === 4 && (
-            <div className="max-w-lg mx-auto text-center space-y-8">
-              <h2 className="text-3xl font-bold">Final Confirmation</h2>
-              <div className="space-y-6 text-left">
+            <div className="max-w-3xl mx-auto space-y-8">
+              <h2 className="text-3xl font-bold text-center">Final Confirmation</h2>
+              
+              {/* Document Upload Section */}
+              <div className="border border-gray-200 rounded-3xl p-8 bg-gray-50">
+                <h3 className="text-xl font-semibold mb-4">Upload Documents (Optional)</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  You can upload additional documents such as passport copy, visa, flight tickets, or any other relevant documents.
+                  Accepted formats: Images (JPG, PNG, WEBP, GIF) and PDF files (max 10MB each).
+                </p>
+                
+                <div className="space-y-4">
+                  {/* File Upload Button */}
+                  <label className="border-2 border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors bg-white">
+                    <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                    <span className="text-sm font-medium text-gray-700">Click to upload documents</span>
+                    <span className="text-xs text-gray-500 mt-1">JPG, PNG, WEBP, PDF (Max 10MB per file)</span>
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      multiple
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        const validFiles = files.filter(file => {
+                          const valid = validateFileType(file);
+                          if (!valid) {
+                            // error is already set by validateFileType
+                          }
+                          return valid;
+                        });
+                        
+                        if (validFiles.length > 0) {
+                          updateForm('uploadedDocuments', [...formData.uploadedDocuments, ...validFiles]);
+                        }
+                        // Reset input to allow re-uploading same file
+                        e.target.value = '';
+                      }} 
+                    />
+                  </label>
+
+                  {/* Uploaded Files List */}
+                  {formData.uploadedDocuments.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">
+                        {formData.uploadedDocuments.length} document{formData.uploadedDocuments.length > 1 ? 's' : ''} uploaded
+                      </p>
+                      {formData.uploadedDocuments.map((file, index) => (
+                        <div key={index} className="border border-green-200 bg-green-50 rounded-2xl p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                                <File className="w-5 h-5 text-green-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDocs = formData.uploadedDocuments.filter((_, i) => i !== index);
+                                updateForm('uploadedDocuments', newDocs);
+                              }}
+                              className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
+                              title="Remove file"
+                            >
+                              <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Confirmation Checkboxes */}
+              <div className="space-y-6 text-left bg-white border border-gray-200 rounded-3xl p-8">
+                <h3 className="text-lg font-semibold mb-4">Declaration</h3>
                 <label className="flex gap-4 cursor-pointer">
                   <input type="checkbox" checked={formData.infoAccurate} onChange={e => updateForm('infoAccurate', e.target.checked)} className="mt-1 accent-rose-500 w-5 h-5" />
                   <span className="text-sm">I confirm that all the information provided is accurate to the best of my knowledge.</span>

@@ -15,6 +15,7 @@ import {
 import { parseGuestListFile } from '../lib/guestListParser';
 import { formatMobileForDisplay } from '../lib/constants';
 import ColumnFilterHeader, { getColumnValue, type ColumnFilter } from '../components/ColumnFilterHeader';
+import DocumentsModal from '../components/DocumentsModal';
 import {
   Heart,
   Search,
@@ -31,6 +32,7 @@ import {
   Send,
   MessageCircle,
   Pencil,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { Fragment } from 'react';
 
@@ -199,6 +201,10 @@ export default function GuestList() {
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [guestForm, setGuestForm] = useState<GuestFormState>(emptyGuestForm);
   const [guestFormError, setGuestFormError] = useState('');
+
+  // Documents modal state
+  const [showDocumentsModal, setShowDocumentsModal] = useState(false);
+  const [selectedGuestForDocuments, setSelectedGuestForDocuments] = useState<Guest | null>(null);
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -846,10 +852,7 @@ export default function GuestList() {
                   <col style={{ width: '6%' }} />
                   <col style={{ width: '6%' }} />
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: '11%' }} />
                   <col style={{ width: '7%' }} />
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '10%' }} />
                   <col style={{ width: '8%' }} />
                 </colgroup>
                 <thead className="bg-gray-50 border-b-2 border-gray-200">
@@ -952,6 +955,9 @@ export default function GuestList() {
                       onSortChange={handleColumnSortChange}
                     />
                     <th className="px-4 py-3 text-left font-semibold text-gray-900">
+                      Documents
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Actions
                     </th>
                   </tr>
@@ -1049,6 +1055,31 @@ export default function GuestList() {
                                guest.whatsappStatus === 'Pending' ? '⏳ Pending' :
                                '— Not Sent'}
                             </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {guest.documents && guest.documents.length > 0 ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedGuestForDocuments(guest);
+                                  setShowDocumentsModal(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors hover:underline"
+                              >
+                                <LinkIcon className="w-4 h-4" />
+                                <span>Link ({guest.documents.length})</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedGuestForDocuments(guest);
+                                  setShowDocumentsModal(true);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 text-sm transition-colors"
+                                title="No documents - click to upload"
+                              >
+                                —
+                              </button>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
@@ -1535,6 +1566,27 @@ export default function GuestList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Documents Modal */}
+      {showDocumentsModal && selectedGuestForDocuments && (
+        <DocumentsModal
+          guest={selectedGuestForDocuments}
+          onClose={() => {
+            setShowDocumentsModal(false);
+            setSelectedGuestForDocuments(null);
+          }}
+          onUpdate={() => {
+            refreshGuests();
+            if (selectedGuestForDocuments) {
+              // Update the selected guest with fresh data
+              const updatedGuest = guests.find(g => g.id === selectedGuestForDocuments.id);
+              if (updatedGuest) {
+                setSelectedGuestForDocuments(updatedGuest);
+              }
+            }
+          }}
+        />
       )}
     </div>
   );
