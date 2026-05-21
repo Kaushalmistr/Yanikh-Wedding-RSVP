@@ -39,3 +39,25 @@ select {
 ::-webkit-scrollbar-thumb:hover {
   background: #f472b6;
 }
+
+.filter-dropdown-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #f472b6 #f3f4f6;
+}
+
+.filter-dropdown-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.filter-dropdown-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.filter-dropdown-scroll::-webkit-scrollbar-thumb {
+  background: #f9a8d4;
+  border-radius: 999px;
+}
+
+.filter-dropdown-scroll::-webkit-scrollbar-thumb:hover {
+  background: #f472b6;
+}

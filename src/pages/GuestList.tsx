@@ -14,6 +14,7 @@ import {
 } from '../lib/db';
 import { parseGuestListFile } from '../lib/guestListParser';
 import { formatMobileForDisplay } from '../lib/constants';
+import ColumnFilterHeader, { getColumnValue, type ColumnFilter } from '../components/ColumnFilterHeader';
 import {
   Heart,
   Search,
@@ -171,7 +172,9 @@ export default function GuestList() {
   const [expandedGuests, setExpandedGuests] = useState<string[]>([]);
   const [selectedGuests, setSelectedGuests] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<'all' | 'Yes' | 'Maybe' | 'Cannot attend'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'date' | 'status'>('name');
+  const [sortBy, setSortBy] = useState<'original' | 'name' | 'date' | 'status'>('original');
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [activeSortColumn, setActiveSortColumn] = useState<string | null>(null);
   const [showBanner, setShowBanner] = useState(true);
 
   // Message modal state
@@ -203,6 +206,20 @@ export default function GuestList() {
 
   const refreshGuests = () => {
     if (id) setGuests(getGuestsByEvent(id));
+  };
+
+  const handleColumnFilterChange = (columnName: string, filter: ColumnFilter) => {
+    setColumnFilters((prev) => ({
+      ...prev,
+      [columnName]: filter,
+    }));
+  };
+
+  const handleColumnSortChange = (columnName: string | null, sortOrder: 'asc' | 'desc' | null) => {
+    setActiveSortColumn(columnName);
+    if (columnName) {
+      setSortBy('original');
+    }
   };
 
   useEffect(() => {
@@ -309,21 +326,41 @@ export default function GuestList() {
       result = result.filter((guest) => guest.attendanceStatus === filterStatus);
     }
 
+    // Column-level filters (AND logic)
+    for (const [columnName, filterConfig] of Object.entries(columnFilters)) {
+      if (!filterConfig || filterConfig.values.length === 0) continue;
+
+      result = result.filter((guest) => {
+        const columnValue = getColumnValue(guest, columnName);
+        return filterConfig.values.includes(columnValue);
+      });
+    }
+
     // Sort
-    result = [...result].sort((a, b) => {
-      if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'date') {
-        return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
-      } else if (sortBy === 'status') {
-        const statusOrder = { 'Yes': 0, 'Maybe': 1, 'Cannot attend': 2 };
-        return statusOrder[a.attendanceStatus as keyof typeof statusOrder] - statusOrder[b.attendanceStatus as keyof typeof statusOrder];
-      }
-      return 0;
-    });
+    if (activeSortColumn && columnFilters[activeSortColumn]?.sortOrder) {
+      const sortOrder = columnFilters[activeSortColumn].sortOrder;
+      result = [...result].sort((a, b) => {
+        const aVal = getColumnValue(a, activeSortColumn);
+        const bVal = getColumnValue(b, activeSortColumn);
+        const comparison = aVal.localeCompare(bVal);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+    } else if (sortBy !== 'original') {
+      result = [...result].sort((a, b) => {
+        if (sortBy === 'name') {
+          return a.name.localeCompare(b.name);
+        } else if (sortBy === 'date') {
+          return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+        } else if (sortBy === 'status') {
+          const statusOrder = { 'Yes': 0, 'Maybe': 1, 'Cannot attend': 2 };
+          return statusOrder[a.attendanceStatus as keyof typeof statusOrder] - statusOrder[b.attendanceStatus as keyof typeof statusOrder];
+        }
+        return 0;
+      });
+    }
 
     return result;
-  }, [guests, searchQuery, filterStatus, sortBy]);
+  }, [guests, searchQuery, filterStatus, sortBy, columnFilters, activeSortColumn]);
 
   const toggleGuestExpanded = (guestId: string) => {
     setExpandedGuests((prev) =>
@@ -754,6 +791,7 @@ export default function GuestList() {
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
               >
+                <option value="original">Original Order (Excel)</option>
                 <option value="name">Sort by Name</option>
                 <option value="date">Sort by Date</option>
                 <option value="status">Sort by Status</option>
@@ -826,39 +864,93 @@ export default function GuestList() {
                         className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      First Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Last Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Phone Number
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Email Address
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Signed-In
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Sangeet
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Shaadi
-                    </th>
+                    <ColumnFilterHeader
+                      columnName="name"
+                      displayName="First Name"
+                      guests={guests}
+                      columnFilter={columnFilters['name']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                      textColumn
+                    />
+                    <ColumnFilterHeader
+                      columnName="name"
+                      displayName="Last Name"
+                      guests={guests}
+                      columnFilter={columnFilters['name']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                      textColumn
+                    />
+                    <ColumnFilterHeader
+                      columnName="mobile"
+                      displayName="Phone Number"
+                      guests={guests}
+                      columnFilter={columnFilters['mobile']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                      textColumn
+                    />
+                    <ColumnFilterHeader
+                      columnName="email"
+                      displayName="Email Address"
+                      guests={guests}
+                      columnFilter={columnFilters['email']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                      textColumn
+                    />
+                    <ColumnFilterHeader
+                      columnName="attendanceStatus"
+                      displayName="Signed-In"
+                      guests={guests}
+                      columnFilter={columnFilters['attendanceStatus']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
+                    <ColumnFilterHeader
+                      columnName="Sangeet"
+                      displayName="Sangeet"
+                      guests={guests}
+                      columnFilter={columnFilters['Sangeet']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
+                    <ColumnFilterHeader
+                      columnName="Shaadi"
+                      displayName="Shaadi"
+                      guests={guests}
+                      columnFilter={columnFilters['Shaadi']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
                     <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Tags
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      City
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Source
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      WhatsApp Status
-                    </th>
+                    <ColumnFilterHeader
+                      columnName="city"
+                      displayName="City"
+                      guests={guests}
+                      columnFilter={columnFilters['city']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
+                    <ColumnFilterHeader
+                      columnName="uploadSource"
+                      displayName="Source"
+                      guests={guests}
+                      columnFilter={columnFilters['uploadSource']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
+                    <ColumnFilterHeader
+                      columnName="whatsappStatus"
+                      displayName="WhatsApp Status"
+                      guests={guests}
+                      columnFilter={columnFilters['whatsappStatus']}
+                      onFilterChange={handleColumnFilterChange}
+                      onSortChange={handleColumnSortChange}
+                    />
                     <th className="px-4 py-3 text-left font-semibold text-gray-900">
                       Actions
                     </th>
@@ -894,7 +986,7 @@ export default function GuestList() {
                           <td className="px-4 py-3 text-gray-700 truncate">
                             {lastName || '-'}
                           </td>
-                          <td className="px-4 py-3 text-gray-600">{formatMobileForDisplay(guest.mobile, guest.countryCode || 'IN')}</td>
+                          <td className="px-4 py-3 text-gray-600">{guest.mobile}</td>
                           <td className="px-4 py-3 text-gray-600">
                             <a href={`mailto:${guest.email}`} className="hover:text-rose-600 text-blue-600 block truncate">
                               {guest.email}
