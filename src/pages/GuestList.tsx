@@ -842,18 +842,21 @@ export default function GuestList() {
             </div>
           ) : (
             <div className="w-full overflow-x-auto">
-              <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <table className="w-full text-sm" style={{ tableLayout: 'fixed', width: '100%', minWidth: '1300px' }}>
                 <colgroup>
-                  <col style={{ width: '4%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '9%' }} />
-                  <col style={{ width: '9%' }} />
-                  <col style={{ width: '15%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '7%' }} />
-                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '3%' }} />   {/* Checkbox */}
+                  <col style={{ width: '8%' }} />   {/* First Name */}
+                  <col style={{ width: '8%' }} />   {/* Last Name */}
+                  <col style={{ width: '10%' }} />  {/* Phone Number */}
+                  <col style={{ width: '12%' }} />  {/* Email Address */}
+                  <col style={{ width: '6%' }} />   {/* Signed-In */}
+                  <col style={{ width: '6%' }} />   {/* Sangeet */}
+                  <col style={{ width: '6%' }} />   {/* Shaadi */}
+                  <col style={{ width: '7%' }} />   {/* City */}
+                  <col style={{ width: '7%' }} />   {/* Source */}
+                  <col style={{ width: '9%' }} />   {/* WhatsApp Status */}
+                  <col style={{ width: '10%' }} />  {/* Documents */}
+                  <col style={{ width: '8%' }} />   {/* Actions */}
                 </colgroup>
                 <thead className="bg-gray-50 border-b-2 border-gray-200">
                   <tr>
@@ -927,9 +930,6 @@ export default function GuestList() {
                       onFilterChange={handleColumnFilterChange}
                       onSortChange={handleColumnSortChange}
                     />
-                    <th className="px-4 py-3 text-left font-semibold text-gray-900">
-                      Tags
-                    </th>
                     <ColumnFilterHeader
                       columnName="city"
                       displayName="City"
@@ -1019,18 +1019,6 @@ export default function GuestList() {
                                 ✓
                               </span>
                             )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              <span className="inline-block px-2.5 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                {guest.city}
-                              </span>
-                              {guest.needsAccommodation && (
-                                <span className="inline-block px-2.5 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                                  Accommodation
-                                </span>
-                              )}
-                            </div>
                           </td>
                           <td className="px-4 py-3 text-gray-600 truncate">{guest.city}</td>
                           <td className="px-4 py-3">
