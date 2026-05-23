@@ -1566,12 +1566,18 @@ export default function GuestList() {
             setSelectedGuestForDocuments(null);
           }}
           onUpdate={() => {
-            refreshGuests();
-            if (selectedGuestForDocuments) {
-              // Update the selected guest with fresh data
-              const updatedGuest = guests.find(g => g.id === selectedGuestForDocuments.id);
-              if (updatedGuest) {
-                setSelectedGuestForDocuments(updatedGuest);
+            console.log("GuestList onUpdate: Called! Event ID:", id);
+            if (id) {
+              const freshGuests = getGuestsByEvent(id);
+              console.log("GuestList onUpdate: Fresh guests count:", freshGuests.length);
+              setGuests(freshGuests);
+              if (selectedGuestForDocuments) {
+                console.log("GuestList onUpdate: Finding guest in fresh list by ID:", selectedGuestForDocuments.id);
+                const updatedGuest = freshGuests.find((g) => g.id === selectedGuestForDocuments.id);
+                console.log("GuestList onUpdate: Found guest:", updatedGuest?.name, "documents count:", updatedGuest?.documents?.length);
+                if (updatedGuest) {
+                  setSelectedGuestForDocuments(updatedGuest);
+                }
               }
             }
           }}
