@@ -26,6 +26,7 @@ export default function DocumentsModal({ guest, onClose, onUpdate }: DocumentsMo
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get all documents for the guest and associated guests
+  console.log("DocumentsModal Render: guest name:", guest.name, "prop documents:", guest.documents);
   const allDocuments = guest.documents || [];
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,11 +50,16 @@ export default function DocumentsModal({ guest, onClose, onUpdate }: DocumentsMo
       }
 
       if (newDocuments.length > 0) {
+        console.log("DocumentsModal handleFileSelect: Current guest documents count:", allDocuments.length);
+        console.log("DocumentsModal handleFileSelect: New documents count:", newDocuments.length);
         const updatedDocuments = [...allDocuments, ...newDocuments];
+        console.log("DocumentsModal handleFileSelect: Saving updated documents to db:", updatedDocuments);
         await updateGuest(guest.id, { documents: updatedDocuments });
+        console.log("DocumentsModal handleFileSelect: Calling onUpdate...");
         onUpdate?.();
       }
     } catch (err) {
+      console.error("DocumentsModal handleFileSelect error:", err);
       setUploadError(err instanceof Error ? err.message : 'Failed to upload documents');
     } finally {
       setIsUploading(false);
