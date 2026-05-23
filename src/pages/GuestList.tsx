@@ -1074,10 +1074,11 @@ export default function GuestList() {
                                   setSelectedGuestForDocuments(guest);
                                   setShowDocumentsModal(true);
                                 }}
-                                className="text-gray-400 hover:text-gray-600 text-sm transition-colors"
-                                title="No documents - click to upload"
+                                className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2.5 py-1 rounded text-sm transition-colors font-medium"
+                                title="No documents uploaded - click to upload"
                               >
-                                —
+                                <FileText className="w-4 h-4" />
+                                <span>Upload</span>
                               </button>
                             )}
                           </td>
