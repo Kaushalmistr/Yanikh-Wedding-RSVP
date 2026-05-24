@@ -12,14 +12,16 @@
 ## Technology Stack
 
 ### Frontend
-- **Framework:** React 18 with TypeScript
-- **Build Tool:** Vite
-- **Routing:** React Router v6
-- **Styling:** Tailwind CSS
+- **Framework:** React 19 with TypeScript
+- **Build Tool:** Vite 7
+- **Routing:** React Router DOM v7
+- **Styling:** Tailwind CSS 4
 - **State Management:** React Context API (AuthContext)
 - **Icons:** Lucide React
 - **Spreadsheet Export:** XLSX (SheetJS)
 - **UUID Generation:** uuid
+- **Country Code Dropdown:** react-select with react-country-flag
+- **Class Utilities:** clsx + tailwind-merge
 
 ### Backend/Storage
 - **Database:** localStorage (Client-side)
@@ -28,43 +30,61 @@
 
 ### Development
 - **Package Manager:** npm
-- **Node Version:** Latest compatible
+- **Node Version:** v18 or higher
+- **TypeScript:** 5.9
 - **Config:** tsconfig.json for TypeScript, vite.config.ts for build
+- **Single-File Build:** vite-plugin-singlefile for easy deployment
 
 ---
 
 ## Project Structure
 
 ```
-/Users/kaushalmistry/Downloads/Kaushal/Projects/Yanikh-Wedding-RSVP/
+Yanikh-Wedding-RSVP/
 ├── src/
-│   ├── App.tsx                 # Main app with routing
+│   ├── App.tsx                 # Main app with HashRouter routing
 │   ├── main.tsx                # React entry point
-│   ├── index.css               # Global styles
+│   ├── index.css               # Global styles (incl. column filter animations)
+│   ├── components/
+│   │   ├── ColumnFilterHeader.tsx  # Reusable column filter/sort dropdown
+│   │   ├── CountryCodeSelect.tsx   # Country code selector (react-select)
+│   │   ├── CountryFlag.tsx         # Country flag display component
+│   │   └── DocumentsModal.tsx      # Document upload/preview/download modal
 │   ├── context/
 │   │   └── AuthContext.tsx      # Authentication state management
 │   ├── lib/
-│   │   ├── constants.ts         # App-wide constants
+│   │   ├── constants.ts         # App-wide constants, country codes, validation
 │   │   ├── db.ts                # Database layer (localStorage CRUD)
+│   │   ├── documentService.ts   # Document upload, validation, download utils
 │   │   ├── guestListParser.ts   # Excel/CSV file parsing and event detection
-│   │   └── supabase.ts          # Placeholder for Supabase
+│   │   ├── guestUploadService.ts # Bulk guest upload with WhatsApp integration
+│   │   ├── seedData.ts          # Dummy data seeding for development
+│   │   ├── supabase.ts          # Placeholder for Supabase
+│   │   └── whatsappService.ts   # WhatsApp messaging (mock implementation)
 │   ├── pages/
 │   │   ├── AuthPage.tsx         # Login/Signup page
 │   │   ├── Dashboard.tsx        # Events list & management
 │   │   ├── CreateEvent.tsx      # Create new wedding event
 │   │   ├── EventDetail.tsx      # Event details & guest list view
-│   │   ├── GuestList.tsx        # Full guest list table view
-│   │   ├── RSVPForm.tsx         # Multi-step RSVP form
+│   │   ├── GuestList.tsx        # Full guest list with CRUD, filters, documents
+│   │   ├── RSVPForm.tsx         # Multi-step RSVP form with document upload
 │   │   └── BulkMessaging.tsx    # Bulk messaging & auto-send features
 │   ├── utils/
-│   │   └── cn.ts                # Tailwind class utilities
+│   │   ├── cn.ts                # Tailwind class utilities
+│   │   └── CountryCodeSelect.tsx # Legacy country code selector
+├── context/
+│   └── context.md               # Project context documentation
 ├── public/
 │   └── images/                  # Static assets
 ├── index.html                   # HTML entry point
 ├── tsconfig.json                # TypeScript config
 ├── vite.config.ts               # Vite config
 ├── package.json                 # Dependencies
-└── README.md                     # Project documentation
+├── DOCUMENT_MANAGEMENT_GUIDE.md           # Document management quick start guide
+├── DOCUMENT_MANAGEMENT_IMPLEMENTATION.md  # Document management implementation details
+├── DUMMY_DATA_GUIDE.md                    # Dummy data seeding guide
+├── WHATSAPP_INTEGRATION.md                # WhatsApp integration guide
+└── README.md                    # Project documentation
 ```
 
 ---
@@ -106,23 +126,15 @@ interface Guest {
   
   // Personal Details
   name: string;
-  countryCode: string;       // ISO country code (e.g., 'IN', 'US', 'GB')
+  countryCode?: string;      // ISO country code (e.g., 'IN', 'US', 'GB')
   mobile: string;            // Mobile number (digits only, validated per country)
   email: string;             // Validated email format
   city: string;
-  gender: 'Male' | 'Female' | 'Other';
   respondingFor: 'Self' | 'Couple' | 'Family';
   
   // Attendance
   attendanceStatus: 'Yes' | 'Maybe' | 'Cannot attend';
   functionAttendance: Record<string, 'Yes' | 'No'>;
-  
-  // Personal Travel Details
-  personalTravelMode: 'By Flight' | 'By Train' | 'Myself';
-  flightTicket?: File;      // Validated: Images (JPG, PNG, WEBP, GIF) + PDF only, max 5MB
-  flightPnr?: string;       // 6 alphanumeric characters (e.g., ABC123)
-  trainTicket?: File;       // Validated: Images (JPG, PNG, WEBP, GIF) + PDF only, max 5MB
-  trainPnr?: string;        // 10 numeric digits (e.g., 1234567890)
   
   // Guest Counts
   adults: number;
@@ -137,13 +149,14 @@ interface Guest {
     mobile: string;          // Validated per country
     email: string;           // Validated email format
     // Travel Details for each guest
-    travelMode?: 'By Flight' | 'By Train' | 'Myself';
+    travelMode?: string;
+    travelSameAsMain?: 'flight' | 'train' | null;
     pnrNumber?: string;      // Flight: 6 alphanumeric, Train: 10 digits
-    ticketFile?: File;       // Validated: Images + PDF only, max 5MB
+    ticketFile?: File | null;
     // Government ID Proof for each guest
     govIdType?: string;      // 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'
     govIdNumber?: string;    // Validated per ID type
-    govIdFile?: File;        // Validated: Images + PDF only, max 5MB
+    govIdFile?: File | null;
   }>;
   
   // Accommodation
@@ -154,11 +167,34 @@ interface Guest {
   roomPreference?: string;
   preferredRoommates?: string;
   
+  // Travel (Arrival)
+  arrivalMode?: string;
+  arrivalDate?: string;
+  arrivalTime?: string;
+  arrivalTransportName?: string;
+  arrivalNumber?: string;
+  arrivalLocation?: string;
+  arrivalItineraryFile?: string;
+  
+  // Travel (Departure)
+  departureDate?: string;
+  departureTime?: string;
+  departureTransportName?: string;
+  departureNumber?: string;
+  departureItineraryFile?: string;
+  
+  // Airport/Station Transfers
+  needsPickup: boolean;
+  needsDrop: boolean;
+  transferPassengers: number;
+  transferBags: number;
+  transferRequirements?: string;
+  
   // ID Proof (Main Guest) - Validated per type
   idType?: string;           // 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'
   idNumber?: string;         // Format validated based on idType
-  idFront?: File;            // Validated: Images + PDF only, max 5MB
-  idBack?: File;             // Validated: Images + PDF only, max 5MB
+  idFrontFile?: string;      // base64 encoded file data
+  idBackFile?: string;       // base64 encoded file data
   
   // Food & Preferences
   mealPreference: string;
@@ -171,6 +207,32 @@ interface Guest {
   infoAccurate: boolean;
   dataConsent: boolean;
   submittedAt: string;
+  
+  // Source Indicator
+  uploadSource?: 'RSVP' | 'BulkUpload' | 'Manual';
+  
+  // WhatsApp Notification
+  whatsappStatus?: 'Pending' | 'Success' | 'Failed' | 'Not Sent';
+  whatsappSentAt?: string;
+  
+  // Documents
+  documents?: GuestDocument[];
+}
+```
+
+### Guest Document
+```typescript
+interface GuestDocument {
+  id: string;
+  fileName: string;
+  fileType: string;          // MIME type
+  fileSize: number;          // in bytes
+  base64Data: string;        // base64 encoded file data
+  uploadedAt: string;
+  uploadedBy?: string;       // 'guest' or 'admin'
+  guestId: string;           // Main guest ID
+  relatedGuestId?: string;   // For additional guests
+  description?: string;
 }
 ```
 
@@ -226,10 +288,15 @@ interface UploadedGuestList {
 - **File:** `src/lib/db.ts`
 - **Usage:** Abstracts localStorage operations
 - **Functions:**
-  - `addUser()`, `getUser()`, `getAllUsers()`
-  - `addEvent()`, `getEvent()`, `getEvents()`, `deleteEvent()`
-  - `addGuest()`, `getGuestsByEvent()`, `getGuests()`
-  - `searchEvents()`, `searchGuests()`
+  - `createUser()`, `findUserByMobile()`, `getUsers()`
+  - `createEvent()`, `getEventById()`, `getEvents()`, `deleteEvent()`, `searchEvents()`
+  - `addGuest()`, `updateGuest()`, `deleteGuest()`, `deleteGuests()`, `getGuestsByEvent()`, `getGuests()`
+  - `addGuestsBulk()`, `addGuestsBulkWithWhatsApp()`, `convertParsedGuestToGuest()`
+  - `updateGuestWhatsAppStatus()`
+  - `createMessage()`, `updateMessage()`, `sendMessage()`, `deleteMessage()`
+  - `getRecipientsForMessage()`
+  - `findGuestByNameOrEmail()`
+  - `setSession()`, `getSession()`, `clearSession()`
 - **Benefits:** Easy to switch from localStorage to real backend
 
 ### 3. **Protected Route Pattern** (Routing)
@@ -254,16 +321,42 @@ interface UploadedGuestList {
     - Guest details shown in expandable tree format
     - Accommodation selection
   - **Step 4:** Final Confirmation
+    - **Document upload** (optional, images + PDF, max 10MB)
     - Data accuracy confirmation
     - Privacy & consent checkboxes
 - **Pattern:** Step state + form data state + expandedGuests state (for tree view)
 - **Validation:** Per-step validation before progression
 - **Display:** Guests shown in hierarchical tree format with expandable sections
 
-### 5. **Component Composition Pattern**
+### 5. **Column Filter/Sort Pattern** (GuestList)
+- **File:** `src/components/ColumnFilterHeader.tsx`
+- **Usage:** Reusable dropdown for each table column header
+- **Features:**
+  - Filter by unique values in each column
+  - Search within filter values
+  - Select All / Deselect All
+  - Sort ascending / descending per column
+  - Visual indicators for active filters (rose dot) and sort state
+  - Click outside to dismiss dropdown
+  - Clear filter action
+
+### 6. **Document Management Pattern** (DocumentsModal)
+- **File:** `src/components/DocumentsModal.tsx`
+- **Usage:** Full modal for managing guest documents
+- **Features:**
+  - Grid and list view toggle
+  - Upload multiple files with validation
+  - Select/deselect documents (individual and bulk)
+  - Download selected or all documents
+  - Delete selected documents with confirmation
+  - Image preview modal
+  - File size formatting and file type icons
+
+### 7. **Component Composition Pattern**
 - Feature cards in EventDetail that toggle views
 - Modal-based guest detail display
 - Conditional rendering for different states
+- Reusable components in `src/components/` directory
 
 ---
 
@@ -431,26 +524,42 @@ Success Page with full submitted data summary
 Redirect to Dashboard
 ```
 
-### Guest List View Flow
+### Guest List View Flow (Enhanced)
 ```
 EventDetail Page
     ↓
-Click "Guest List" card
+Click "Guest List" card or navigate to /guests/:id
     ↓
-showGuestListTable = true
+GuestList page loads with full CRUD functionality:
     ↓
-Display full-width table with all guest columns:
-├─ Name, Email, Mobile, City
-├─ Attendance Status, Adults, Children, Infants
-├─ Accommodation, Meal Preference
-├─ Dietary Restrictions, Special Assistance
-├─ Additional Notes, Submission Date
+Display enhanced table with columns:
+├─ Checkbox (for bulk select)
+├─ Name (with expand toggle for additional guests)
+├─ Email, Phone, City
+├─ RSVP Status (Yes/Maybe/Cannot attend)
+├─ Sangeet, Shaadi (function attendance)
+├─ Accommodation, Source (RSVP/Uploaded/Manual)
+├─ WhatsApp Status (Pending/Success/Failed/Not Sent)
+├─ Documents (link to DocumentsModal)
+├─ Actions (Edit, Delete, Message, RSVP Link)
     ↓
-Back to Events button
+Each column header has ColumnFilterHeader:
+├─ Search within values
+├─ Multi-select filter
+├─ Sort ascending/descending
+├─ Visual active filter indicators
     ↓
-showGuestListTable = false
+Actions available:
+├─ Add Guest (inline form modal)
+├─ Edit Guest (modal with pre-filled data)
+├─ Import from CSV/Excel (bulk upload)
+├─ Delete single or bulk (with confirmation)
+├─ Send Message to individual guest
+├─ Copy RSVP Link for guest
+├─ View/Upload Documents per guest
+├─ Export to Excel
     ↓
-Return to feature cards grid
+Back to Events
 ```
 
 ### Bulk Messaging Flow
@@ -596,22 +705,69 @@ Message History Tab:
 - Track upload history with processing statistics
 - Download CSV template for proper file format
 
-### 6. Guest Management & Deletion
-- View all RSVPs for an event
-- Full-width guest list table
+### 6. Guest Management (Full CRUD)
+- View all RSVPs for an event in dedicated GuestList page
+- **Add guests manually** via inline form modal (first name, last name, phone, email, city, function attendance, accommodation, WhatsApp status)
+- **Edit existing guests** via modal with pre-filled data
 - **Single guest deletion** with delete button in each row
 - **Bulk deletion** with checkboxes for multiple guests
 - **Delete additional guests** individually from expanded guest sections
-- **Confirmation popup** before deleting single or multiple guests
-- **Toast notifications** for successful/failed deletions
-- **Loading states** during deletion operations
+- **Confirmation modal** before deleting single or multiple guests
+- **Toast notifications** for successful/failed deletions (auto-dismiss after 4 seconds)
+- **Loading states** during deletion with spinner and disabled buttons
 - **Auto-clear selection** when filters or search changes
+- **Source tracking** badges: RSVP Form (blue), Uploaded (orange), Manual (green)
+- **WhatsApp status tracking** column with color-coded badges
+- **RSVP link sharing** via copy-to-clipboard per guest
+- **Individual messaging** to guests from the list
+- **Expandable rows** showing additional guest details in tree format
+- Import guests from CSV/Excel files (bulk upload)
 - Export guest data to Excel (.xlsx)
-- View detailed guest information
 - Filter by various criteria
 - Track guest count statistics
 
-### 7. Data Export
+### 7. Column Filtering & Sorting
+- **Per-column filter dropdowns** on every table column header
+- **Search within filter** to find specific values
+- **Multi-select filtering** with checkboxes for each unique value
+- **Select All / Deselect All** toggle
+- **Ascending/descending sorting** per column
+- **Visual indicators** for active filters (rose badge dot)
+- **Clear filter** action per column
+- **Click-outside dismissal** for dropdown menus
+
+### 8. Document Management System
+- **RSVP Form integration** - guests can upload documents at Step 4 (Final Confirmation)
+- **Guest List integration** - Documents column with upload link per guest
+- **DocumentsModal** - full-featured document management modal:
+  - Grid view with thumbnail cards
+  - List view with detailed file info
+  - Upload multiple files (images + PDF, max 10MB)
+  - File type validation (JPG, PNG, WEBP, GIF, BMP, PDF)
+  - Image preview with modal
+  - Select individual or all documents
+  - Download selected or all documents
+  - Delete selected documents with confirmation
+  - File size display and file type icons
+- **documentService.ts** utility functions:
+  - `fileToBase64()` - convert files to base64
+  - `base64ToBlob()` - convert base64 back to blob
+  - `validateDocumentFile()` - validate type and size
+  - `createGuestDocument()` - create document metadata
+  - `downloadDocument()` - trigger browser download
+  - `downloadDocumentsAsZip()` - batch download with naming
+  - `getFileIcon()` / `formatFileSize()` / `getPreviewUrl()`
+
+### 9. WhatsApp Integration (Mock)
+- **WhatsApp messaging service** with mock implementation for development
+- **Bulk message sending** to uploaded guests
+- **Status tracking** per guest (Pending/Success/Failed/Not Sent)
+- **Message templates** with guest name, event details, and attending functions
+- **International phone formatting** using country codes
+- **Retry mechanism** for failed messages
+- Ready for production integration with Twilio WhatsApp API
+
+### 10. Data Export
 - Export guest list to Excel format
 - Includes all guest information
 - Formatted spreadsheet with proper headers
@@ -678,9 +834,15 @@ AuthContext
 
 ### Guest Operations
 - `addGuest(guest)` - Submit RSVP
+- `updateGuest(id, updates)` - Update guest details
+- `deleteGuest(id)` - Delete single guest
+- `deleteGuests(ids)` - Bulk delete multiple guests
 - `getGuestsByEvent(eventId)` - Get event's RSVPs
 - `getGuests()` - Get all guests across events
-- `searchGuests(query)` - Search guests by name
+- `addGuestsBulk(guestList)` - Bulk add guests from CSV/Excel
+- `addGuestsBulkWithWhatsApp(guestList, eventId, sendWhatsApp)` - Bulk add with WhatsApp messaging
+- `updateGuestWhatsAppStatus(guestId, status, sentAt)` - Update WhatsApp delivery status
+- `convertParsedGuestToGuest(parsedGuests, eventId)` - Convert parsed CSV data to Guest objects
 
 ### Bulk Message Operations
 - `createMessage(message)` - Create new draft or send message
@@ -744,9 +906,16 @@ Supported file formats for detection:
 - Case-insensitive matching
 - Handles missing or empty columns gracefully
 
+### Session Operations
+- `setSession(user)` - Store user session in sessionStorage
+- `getSession()` - Get current user session
+- `clearSession()` - Clear user session on logout
+
 ### Data Storage
-- **Key Format:** `wedding_users`, `wedding_events`, `wedding_guests`, `wedding_messages`
+- **Key Format:** `wedding_users`, `wedding_events`, `wedding_guests`, `wedding_messages`, `wedding_uploaded_guest_lists`
 - **Format:** JSON stringification in localStorage
+- **Session:** sessionStorage for user authentication session
+- **Documents:** base64-encoded file data stored within guest records
 - **Persistence:** Browser localStorage (max ~5-10MB)
 
 ---
@@ -760,7 +929,7 @@ Supported file formats for detection:
 | `/create-event` | CreateEvent | Yes | Create new wedding event |
 | `/event/:id` | EventDetail | Yes | Event details, feature cards, guest list |
 | `/guests/:id` | GuestList | Yes | Full guest list table view |
-| `/rsvp/:id` | RSVPForm | Yes | Submit RSVP response |
+| `/rsvp/:id` | RSVPForm | Yes | Submit RSVP response with document upload |
 | `/messaging/:id` | BulkMessaging | Yes | Compose and send bulk messages to guests |
 | `*` | Navigate to `/` | - | Catch-all redirect |
 
@@ -1032,15 +1201,22 @@ npm run preview
 | File | Purpose |
 |------|---------|
 | `AuthContext.tsx` | Global authentication state |
-| `db.ts` | localStorage CRUD operations |
+| `db.ts` | localStorage CRUD operations (users, events, guests, messages, documents) |
 | `constants.ts` | App-wide constants, country codes, and validation functions |
+| `documentService.ts` | Document upload/download/validation/preview utilities |
 | `guestListParser.ts` | Parse Excel/CSV files and detect event attendance |
-| `App.tsx` | Route configuration & auth protection |
+| `guestUploadService.ts` | Bulk guest upload with WhatsApp integration |
+| `whatsappService.ts` | WhatsApp messaging service (mock for dev, Twilio-ready) |
+| `seedData.ts` | Dummy data seeding for development/testing |
+| `ColumnFilterHeader.tsx` | Reusable column filter/sort dropdown component |
+| `CountryCodeSelect.tsx` | Country code selector with flags (react-select) |
+| `DocumentsModal.tsx` | Full document management modal (upload/preview/download/delete) |
+| `App.tsx` | HashRouter route configuration & auth protection |
 | `Dashboard.tsx` | Event list & management interface |
 | `CreateEvent.tsx` | Event creation form |
 | `EventDetail.tsx` | Event details, feature cards, guest list |
-| `GuestList.tsx` | Full-width guest list table view |
-| `RSVPForm.tsx` | Multi-step RSVP collection form with comprehensive validation |
+| `GuestList.tsx` | Full CRUD guest list with column filters, documents, WhatsApp status |
+| `RSVPForm.tsx` | Multi-step RSVP collection form with document upload |
 | `BulkMessaging.tsx` | Bulk messaging and auto-send features |
 
 ---
@@ -1331,8 +1507,53 @@ All input fields implement real-time character filtering to prevent invalid inpu
   - **Auto-clear selection** when filters or search criteria changes
   - **Instant guest list updates** after successful deletion
 
+- **v1.3** - Column Filtering & Sorting (May 2026)
+  - **ColumnFilterHeader component** - reusable per-column filter/sort dropdown
+  - **Multi-select filtering** with checkboxes for each unique column value
+  - **Search within filter** values
+  - **Ascending/descending sorting** per column
+  - **Visual indicators** for active filters and sort state
+  - **Select All / Clear filter** actions
+  - Custom CSS animations for filter dropdown
+
+- **v1.4** - Country Code Select Enhancement (May 2026)
+  - **CountryCodeSelect component** using react-select with react-country-flag
+  - **SVG flag icons** for all 14 supported countries
+  - **Searchable dropdown** with custom rose-themed styling
+  - Replaced inline country code dropdowns in RSVP form
+
+- **v1.5** - Document Management System (May 2026)
+  - **documentService.ts** - complete document handling utility:
+    - File-to-base64 conversion for localStorage storage
+    - File type validation (images + PDF, max 10MB)
+    - Download individual or batch documents
+    - Image preview URL generation
+    - File size formatting and type icon mapping
+  - **DocumentsModal component** - full-featured document manager:
+    - Grid and list view toggle
+    - Multi-file upload with progress
+    - Select/deselect individual or all documents
+    - Download selected or all documents
+    - Delete with confirmation
+    - Image preview modal
+  - **RSVP Form (Step 4)** - optional document upload section
+  - **GuestList** - Documents column with upload button per guest
+  - **GuestDocument interface** added to data model
+
+- **v1.6** - Enhanced GuestList with Full CRUD (May 2026)
+  - **Add guest** via inline form modal (first/last name, phone, email, city, functions, accommodation, WhatsApp status)
+  - **Edit guest** via pre-filled modal
+  - **Bulk import** from CSV/Excel with parseGuestListFile
+  - **Source tracking** badges: RSVP Form (blue), Uploaded (orange), Manual (green)
+  - **WhatsApp status** column with color-coded badges
+  - **RSVP link** copy-to-clipboard per guest
+  - **Individual messaging** modal per guest
+  - **Expandable rows** for additional guest details
+  - **Import status** notifications with auto-dismiss
+  - **WhatsApp Integration** (mock) with guestUploadService.ts and whatsappService.ts
+
 ---
 
-**Last Updated:** May 18, 2026  
+**Last Updated:** May 24, 2026  
 **Maintainers:** [Project Team]  
 **Repository:** Yanikh-Wedding-RSVP
