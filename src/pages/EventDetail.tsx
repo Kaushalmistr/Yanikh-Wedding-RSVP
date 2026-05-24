@@ -191,10 +191,9 @@ export default function EventDetail() {
 
                     {/* Main Guest Details (Always Visible) */}
                     <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 space-y-3 text-sm">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div><span className="text-gray-600">Email:</span> <span className="font-medium break-all">{guest.email}</span></div>
                         <div><span className="text-gray-600">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(guest.mobile, guest.countryCode || 'IN')}</span></div>
-                        <div><span className="text-gray-600">Meal:</span> <span className="font-medium">{guest.mealPreference || '-'}</span></div>
                         <div><span className="text-gray-600">Accommodation:</span> <span className="font-medium">{guest.needsAccommodation ? 'Yes' : 'No'}</span></div>
                       </div>
                       {guest.dietaryRestrictions && <div><span className="text-gray-600">Dietary:</span> <span className="font-medium">{guest.dietaryRestrictions}</span></div>}

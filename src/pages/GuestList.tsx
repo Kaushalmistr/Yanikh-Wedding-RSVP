@@ -140,7 +140,6 @@ function buildGuestPayload(
     idNumber: existing?.idNumber,
     idFrontFile: existing?.idFrontFile,
     idBackFile: existing?.idBackFile,
-    mealPreference: existing?.mealPreference ?? '',
     dietaryRestrictions: existing?.dietaryRestrictions ?? '',
     specialAssistance: existing?.specialAssistance ?? [],
     celebrationParticipation: existing?.celebrationParticipation ?? [],

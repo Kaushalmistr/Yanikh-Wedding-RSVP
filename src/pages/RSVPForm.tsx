@@ -5,9 +5,11 @@ import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, Chevron
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 import CountryCodeSelect from '../components/CountryCodeSelect';
 import { createGuestDocument, type GuestDocument } from '../lib/documentService';
+import { logStorageStats } from '../utils/storageDebug';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
 const TRAVEL_MODES = ['By Flight', 'By Train', 'Myself'];
+const RELATIONS = ['Wife', 'Son', 'Friend', 'Daughter'];
 const FUNCTIONS = ['Welcome Lunch', 'Mehendi', 'Sangeet', 'Haldi', 'Wedding Ceremony', 'Reception', 'Farewell Brunch'];
 
 /** Age 1–12 inclusive → Child; above 12 → Adult. Invalid/missing age returns null. */
@@ -75,12 +77,6 @@ export default function RSVPForm() {
       govIdNumber?: string;
       govIdFile?: File | null;
     }>,
-    needsAccommodation: false,
-    checkInDate: '',
-    checkOutDate: '',
-    numberOfRooms: 1,
-    roomPreference: '',
-    preferredRoommates: '',
     personalTravelMode: '',
     flightTicket: null as File | null,
     trainTicket: null as File | null,
@@ -90,7 +86,6 @@ export default function RSVPForm() {
     idNumber: '',
     idFront: null as File | null,
     idBack: null as File | null,
-    mealPreference: 'No Preference',
     dietaryRestrictions: '',
     specialAssistance: [] as string[],
     celebrationParticipation: [] as string[],
@@ -202,28 +197,26 @@ export default function RSVPForm() {
   const validateFileType = (file: File | null): boolean => {
     if (!file) return true;
     
+    // Must match documentService.ts allowed types
     const allowedTypes = [
-      // Images
       'image/jpeg',
-      'image/jpg', 
+      'image/jpg',
       'image/png',
       'image/webp',
       'image/gif',
       'image/bmp',
-      'image/svg+xml',
-      // PDF
-      'application/pdf'
+      'application/pdf',
     ];
     
     if (!allowedTypes.includes(file.type)) {
-      setError(`Invalid file type. Only images (JPG, PNG, WEBP, GIF) and PDF files are allowed. You selected: ${file.type || 'unknown type'}`);
+      setError(`Invalid file type. Only images (JPG, PNG, WEBP, GIF, BMP) and PDF files are allowed. You selected: ${file.type || 'unknown type'}`);
       return false;
     }
     
-    // Also check file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    // Must match documentService.ts max size (10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
     if (file.size > maxSize) {
-      setError(`File is too large. Maximum size is 5MB. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      setError(`File is too large. Maximum size is 10MB. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       return false;
     }
     
@@ -360,10 +353,7 @@ export default function RSVPForm() {
       }
     }
     if (step === 4) {
-      if (!formData.infoAccurate || !formData.dataConsent) {
-        setError('Please confirm the declaration');
-        return false;
-      }
+      // No validation needed for step 4
     }
     setError('');
     return true;
@@ -380,53 +370,121 @@ export default function RSVPForm() {
     const additionalChildren = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Child').length;
 
     // Convert uploaded documents to GuestDocument format
+    console.log(`RSVPForm: Processing ${formData.uploadedDocuments.length} uploaded documents...`);
+    console.log('RSVPForm: File details:', formData.uploadedDocuments.map(f => ({ name: f.name, type: f.type, size: f.size })));
+    
     const documents: GuestDocument[] = [];
+    const failedDocs: { name: string; error: string }[] = [];
+    
     for (const file of formData.uploadedDocuments) {
       try {
-        const doc = await createGuestDocument(file, '', 'guest'); // ID will be set after guest creation
+        console.log(`RSVPForm: Converting document: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(1)} KB)`);
+        const doc = await createGuestDocument(file, '', 'guest');
         documents.push(doc);
+        console.log(`RSVPForm: ✓ Successfully converted: ${file.name}`);
       } catch (err) {
-        console.error('Failed to process document:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`RSVPForm: ✗ Failed to process ${file.name}:`, errorMsg);
+        failedDocs.push({ name: file.name, error: errorMsg });
       }
     }
+    
+    console.log(`RSVPForm: Conversion complete - ${documents.length} succeeded, ${failedDocs.length} failed`);
+    
+    if (failedDocs.length > 0) {
+      const errorDetails = failedDocs.map(d => `${d.name}: ${d.error}`).join('\n');
+      setError(`${failedDocs.length} document(s) failed to upload:\n${errorDetails}`);
+      console.error('Failed documents details:', failedDocs);
+      return;
+    }
 
-    addGuest({
-      eventId: id,
-      name: formData.name,
-      mobile: formData.mobile,
-      email: formData.email,
-      city: formData.city,
-      respondingFor: formData.respondingFor,
-      attendanceStatus: formData.attendanceStatus,
-      functionAttendance: formData.functionAttendance,
-      adults: 1 + additionalAdults,
-      children: additionalChildren,
-      infants: 0,
-      additionalGuests: formData.additionalGuests,
-      needsAccommodation: formData.needsAccommodation,
-      checkInDate: formData.checkInDate,
-      checkOutDate: formData.checkOutDate,
-      numberOfRooms: formData.numberOfRooms,
-      roomPreference: formData.roomPreference,
-      preferredRoommates: formData.preferredRoommates,
-      arrivalMode: formData.personalTravelMode,
-      idType: formData.idType,
-      idNumber: formData.idNumber,
-      mealPreference: formData.mealPreference,
-      dietaryRestrictions: formData.dietaryRestrictions,
-      specialAssistance: formData.specialAssistance,
-      celebrationParticipation: formData.celebrationParticipation,
-      additionalNotes: formData.additionalNotes,
-      infoAccurate: formData.infoAccurate,
-      dataConsent: formData.dataConsent,
-      needsPickup: false,
-      needsDrop: false,
-      transferPassengers: 0,
-      transferBags: 0,
-      documents: documents.length > 0 ? documents : undefined,
-    });
+    // Log storage stats before saving
+    console.log('\n=== BEFORE SAVING ===');
+    logStorageStats();
+    
+    // CRITICAL: Log the documents array being passed
+    console.log('\n=== DOCUMENTS ARRAY TO BE SAVED ===');
+    console.log('documents.length:', documents.length);
+    console.log('documents array:', documents);
+    console.log('Passing to addGuest - documents field:', documents.length > 0 ? documents : undefined);
 
-    setSuccess(true);
+    try {
+      const guestData = {
+        eventId: id,
+        name: formData.name,
+        mobile: formData.mobile,
+        email: formData.email,
+        city: formData.city,
+        respondingFor: formData.respondingFor,
+        attendanceStatus: formData.attendanceStatus,
+        functionAttendance: formData.functionAttendance,
+        adults: 1 + additionalAdults,
+        children: additionalChildren,
+        infants: 0,
+        additionalGuests: formData.additionalGuests,
+        arrivalMode: formData.personalTravelMode,
+        idType: formData.idType,
+        idNumber: formData.idNumber,
+        dietaryRestrictions: formData.dietaryRestrictions,
+        specialAssistance: formData.specialAssistance,
+        celebrationParticipation: formData.celebrationParticipation,
+        additionalNotes: formData.additionalNotes,
+        infoAccurate: formData.infoAccurate,
+        dataConsent: formData.dataConsent,
+        needsPickup: false,
+        needsDrop: false,
+        transferPassengers: 0,
+        transferBags: 0,
+        documents: documents.length > 0 ? documents : undefined,
+      };
+      
+      console.log('Guest data object before addGuest - documents count:', guestData.documents?.length || 0);
+      
+      const newGuest = addGuest(guestData);
+      
+      console.log(`RSVPForm: Guest created with ID: ${newGuest.id}, documents: ${newGuest.documents?.length || 0}`);
+      
+      // Log storage stats after saving
+      console.log('\n=== AFTER SAVING ===');
+      logStorageStats();
+      
+      // CRITICAL: Verify what's actually in localStorage
+      console.log('\n=== VERIFICATION - Reading from localStorage ===');
+      const guestsInStorage = localStorage.getItem('wedding_guests');
+      if (guestsInStorage) {
+        const parsed = JSON.parse(guestsInStorage);
+        const savedGuest = parsed.find((g: any) => g.id === newGuest.id);
+        if (savedGuest) {
+          console.log('Guest found in localStorage');
+          console.log('Guest name:', savedGuest.name);
+          console.log('Documents in localStorage:', savedGuest.documents?.length || 0);
+          if (savedGuest.documents && savedGuest.documents.length > 0) {
+            console.log('✅ DOCUMENTS ARE IN LOCALSTORAGE!');
+            console.log('Document details:', savedGuest.documents.map((d: any) => ({ name: d.fileName, size: d.fileSize })));
+          } else {
+            console.log('❌ NO DOCUMENTS IN LOCALSTORAGE');
+          }
+        } else {
+          console.log('❌ Guest not found in localStorage');
+        }
+      }
+      
+      console.log('Guest object returned from addGuest - documents count:', newGuest.documents?.length || 0);
+      if (newGuest.documents && newGuest.documents.length > 0) {
+        console.log('Saved documents:');
+        newGuest.documents.forEach((doc, i) => {
+          console.log(`  ${i + 1}. ${doc.fileName} (${(doc.fileSize / 1024).toFixed(1)} KB)`);
+        });
+      } else {
+        console.log('⚠️ WARNING: addGuest returned guest with no documents');
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      console.error('RSVPForm: Failed to save guest:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save RSVP. Please try uploading fewer or smaller documents.');
+      return;
+    }
   };
 
   if (success) {
@@ -472,19 +530,6 @@ export default function RSVPForm() {
                   </div>
                 </div>
               </div>
-
-              {/* Accommodation */}
-              {formData.needsAccommodation && (
-                <div className="border-b pb-8">
-                  <h3 className="text-xl font-bold mb-4 text-gray-900">Accommodation Details</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><p className="text-sm text-gray-500">Check-in</p><p className="font-semibold">{formData.checkInDate}</p></div>
-                    <div><p className="text-sm text-gray-500">Check-out</p><p className="font-semibold">{formData.checkOutDate}</p></div>
-                    <div><p className="text-sm text-gray-500">Rooms Needed</p><p className="font-semibold">{formData.numberOfRooms}</p></div>
-                    {formData.roomPreference && <div><p className="text-sm text-gray-500">Preference</p><p className="font-semibold">{formData.roomPreference}</p></div>}
-                  </div>
-                </div>
-              )}
 
               {/* Additional Guests */}
               {formData.additionalGuests.length > 0 && (
@@ -533,14 +578,15 @@ export default function RSVPForm() {
               )}
 
               {/* Dietary & Preferences */}
-              <div className="border-b pb-8">
-                <h3 className="text-xl font-bold mb-4 text-gray-900">Preferences</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div><p className="text-sm text-gray-500">Meal Preference</p><p className="font-semibold">{formData.mealPreference}</p></div>
-                  {formData.dietaryRestrictions && <div><p className="text-sm text-gray-500">Dietary</p><p className="font-semibold">{formData.dietaryRestrictions}</p></div>}
-                  {formData.specialAssistance.length > 0 && <div><p className="text-sm text-gray-500">Assistance</p><p className="font-semibold">{formData.specialAssistance.join(', ')}</p></div>}
+              {(formData.dietaryRestrictions || formData.specialAssistance.length > 0) && (
+                <div className="border-b pb-8">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Preferences</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {formData.dietaryRestrictions && <div><p className="text-sm text-gray-500">Dietary</p><p className="font-semibold">{formData.dietaryRestrictions}</p></div>}
+                    {formData.specialAssistance.length > 0 && <div><p className="text-sm text-gray-500">Assistance</p><p className="font-semibold">{formData.specialAssistance.join(', ')}</p></div>}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Notes */}
               {formData.additionalNotes && (
@@ -598,7 +644,12 @@ export default function RSVPForm() {
           ))}
         </div>
 
-        {error && <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl">{error}</div>}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border-2 border-red-300 text-red-700 rounded-2xl">
+            <div className="font-semibold mb-2">⚠️ Error</div>
+            <div className="whitespace-pre-line text-sm">{error}</div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl p-10">
 
@@ -1310,7 +1361,10 @@ export default function RSVPForm() {
                       <select value={newGuest.gender} onChange={e => setNewGuest(g => ({...g, gender: e.target.value as 'Male' | 'Female' | 'Other'}))} className="px-5 py-4 border rounded-2xl">
                         <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
                       </select>
-                      <input type="text" placeholder="Relation (Wife, Son, Friend...) *" value={newGuest.relation} onChange={e => setNewGuest(g => ({...g, relation: e.target.value}))} className="px-5 py-4 border rounded-2xl" />
+                      <select value={newGuest.relation} onChange={e => setNewGuest(g => ({...g, relation: e.target.value}))} className="px-5 py-4 border rounded-2xl">
+                        <option value="">Select Relation *</option>
+                        {RELATIONS.map(rel => <option key={rel} value={rel}>{rel}</option>)}
+                      </select>
                     </div>
                   </div>
 
@@ -1899,13 +1953,6 @@ export default function RSVPForm() {
                   Total Guests = <strong>1 (You)</strong> + <strong>{formData.additionalGuests.length}</strong> = <strong>{1 + formData.additionalGuests.length}</strong>
                 </p>
               </div>
-
-              <div>
-                <label className="flex items-center gap-3">
-                  <input type="checkbox" checked={formData.needsAccommodation} onChange={e => updateForm('needsAccommodation', e.target.checked)} className="w-5 h-5 accent-rose-500" />
-                  <span className="font-medium">I need hotel accommodation</span>
-                </label>
-              </div>
             </div>
           )}
 
@@ -1914,92 +1961,17 @@ export default function RSVPForm() {
             <div className="max-w-3xl mx-auto space-y-8">
               <h2 className="text-3xl font-bold text-center">Final Confirmation</h2>
               
-              {/* Document Upload Section */}
-              <div className="border border-gray-200 rounded-3xl p-8 bg-gray-50">
-                <h3 className="text-xl font-semibold mb-4">Upload Documents (Optional)</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  You can upload additional documents such as passport copy, visa, flight tickets, or any other relevant documents.
-                  Accepted formats: Images (JPG, PNG, WEBP, GIF) and PDF files (max 10MB each).
-                </p>
-                
-                <div className="space-y-4">
-                  {/* File Upload Button */}
-                  <label className="border-2 border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center cursor-pointer hover:border-blue-400 transition-colors bg-white">
-                    <Upload className="w-10 h-10 text-gray-400 mb-2" />
-                    <span className="text-sm font-medium text-gray-700">Click to upload documents</span>
-                    <span className="text-xs text-gray-500 mt-1">JPG, PNG, WEBP, PDF (Max 10MB per file)</span>
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      multiple
-                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        const validFiles = files.filter(file => {
-                          const valid = validateFileType(file);
-                          if (!valid) {
-                            // error is already set by validateFileType
-                          }
-                          return valid;
-                        });
-                        
-                        if (validFiles.length > 0) {
-                          updateForm('uploadedDocuments', [...formData.uploadedDocuments, ...validFiles]);
-                        }
-                        // Reset input to allow re-uploading same file
-                        e.target.value = '';
-                      }} 
-                    />
-                  </label>
-
-                  {/* Uploaded Files List */}
-                  {formData.uploadedDocuments.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-gray-700">
-                        {formData.uploadedDocuments.length} document{formData.uploadedDocuments.length > 1 ? 's' : ''} uploaded
-                      </p>
-                      {formData.uploadedDocuments.map((file, index) => (
-                        <div key={index} className="border border-green-200 bg-green-50 rounded-2xl p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
-                                <File className="w-5 h-5 text-green-600" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newDocs = formData.uploadedDocuments.filter((_, i) => i !== index);
-                                updateForm('uploadedDocuments', newDocs);
-                              }}
-                              className="ml-2 p-1.5 hover:bg-red-100 rounded-lg transition-colors group"
-                              title="Remove file"
-                            >
-                              <X className="w-4 h-4 text-gray-400 group-hover:text-red-600" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Confirmation Checkboxes */}
+              {/* Declaration */}
               <div className="space-y-6 text-left bg-white border border-gray-200 rounded-3xl p-8">
                 <h3 className="text-lg font-semibold mb-4">Declaration</h3>
-                <label className="flex gap-4 cursor-pointer">
-                  <input type="checkbox" checked={formData.infoAccurate} onChange={e => updateForm('infoAccurate', e.target.checked)} className="mt-1 accent-rose-500 w-5 h-5" />
-                  <span className="text-sm">I confirm that all the information provided is accurate to the best of my knowledge.</span>
-                </label>
-                <label className="flex gap-4 cursor-pointer">
-                  <input type="checkbox" checked={formData.dataConsent} onChange={e => updateForm('dataConsent', e.target.checked)} className="mt-1 accent-rose-500 w-5 h-5" />
-                  <span className="text-sm">I consent to my data being used for wedding planning purposes only*.</span>
-                </label>
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    • All the information provided is accurate to the best of my knowledge.
+                  </p>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    • I consent to my data being used for wedding planning purposes only.
+                  </p>
+                </div>
               </div>
             </div>
           )}
