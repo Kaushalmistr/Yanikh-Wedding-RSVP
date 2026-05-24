@@ -8,6 +8,7 @@ import GuestList from './pages/GuestList';
 import RSVPForm from './pages/RSVPForm';
 import BulkMessaging from './pages/BulkMessaging';
 import { type ReactNode } from 'react';
+import './utils/storageDebug'; // Load storage debugging tools
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Download, Upload, FileText, Image, FileCheck, Trash2, CheckSquare, Square } from 'lucide-react';
 import type { Guest, GuestDocument } from '../lib/db';
 import { updateGuest } from '../lib/db';
@@ -23,11 +23,16 @@ export default function DocumentsModal({ guest, onClose, onUpdate }: DocumentsMo
   const [uploadError, setUploadError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<GuestDocument | null>(null);
+  const [allDocuments, setAllDocuments] = useState<GuestDocument[]>(guest.documents || []);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Get all documents for the guest and associated guests
-  console.log("DocumentsModal Render: guest name:", guest.name, "prop documents:", guest.documents);
-  const allDocuments = guest.documents || [];
+  // Sync local documents state with guest prop changes
+  useEffect(() => {
+    console.log("DocumentsModal useEffect: Syncing documents from guest prop");
+    setAllDocuments(guest.documents || []);
+  }, [guest.documents]);
+
+  console.log("DocumentsModal Render: guest name:", guest.name, "local documents count:", allDocuments.length);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -54,9 +59,25 @@ export default function DocumentsModal({ guest, onClose, onUpdate }: DocumentsMo
         console.log("DocumentsModal handleFileSelect: New documents count:", newDocuments.length);
         const updatedDocuments = [...allDocuments, ...newDocuments];
         console.log("DocumentsModal handleFileSelect: Saving updated documents to db:", updatedDocuments);
-        await updateGuest(guest.id, { documents: updatedDocuments });
-        console.log("DocumentsModal handleFileSelect: Calling onUpdate...");
-        onUpdate?.();
+        
+        try {
+          await updateGuest(guest.id, { documents: updatedDocuments });
+          
+          // Update local state immediately so UI refreshes without waiting for parent
+          console.log("DocumentsModal handleFileSelect: Updating local state with new documents");
+          setAllDocuments(updatedDocuments);
+          
+          console.log("DocumentsModal handleFileSelect: Calling onUpdate...");
+          onUpdate?.();
+        } catch (err) {
+          console.error("DocumentsModal: Failed to save documents:", err);
+          setUploadError(
+            err instanceof Error 
+              ? err.message 
+              : 'Failed to save documents. Storage limit may be exceeded.'
+          );
+          return;
+        }
       }
     } catch (err) {
       console.error("DocumentsModal handleFileSelect error:", err);
@@ -87,9 +108,22 @@ export default function DocumentsModal({ guest, onClose, onUpdate }: DocumentsMo
     if (!confirm(`Are you sure you want to delete ${selectedDocuments.length} document(s)?`)) return;
 
     const updatedDocuments = allDocuments.filter(doc => !selectedDocuments.includes(doc.id));
-    await updateGuest(guest.id, { documents: updatedDocuments });
-    setSelectedDocuments([]);
-    onUpdate?.();
+    
+    try {
+      await updateGuest(guest.id, { documents: updatedDocuments });
+      
+      // Update local state immediately so UI refreshes without waiting for parent
+      setAllDocuments(updatedDocuments);
+      setSelectedDocuments([]);
+      onUpdate?.();
+    } catch (err) {
+      console.error("DocumentsModal: Failed to delete documents:", err);
+      setUploadError(
+        err instanceof Error 
+          ? err.message 
+          : 'Failed to delete documents. Please try again.'
+      );
+    }
   };
 
   const toggleDocumentSelection = (docId: string) => {
