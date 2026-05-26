@@ -2,340 +2,249 @@
 
 ## Overview
 
-This Wedding RSVP system now includes WhatsApp messaging integration that automatically sends wedding invitations to guests when they are uploaded to the system.
+This Wedding RSVP system includes WhatsApp messaging integration that sends messages to guests directly via the **WhatsApp Business Cloud API** (Meta). Messages are sent automatically — no manual interaction required.
+
+## Architecture
+
+```
+┌─────────────┐       ┌──────────────────────────┐       ┌─────────────────────┐
+│  React App  │──POST──▶  Supabase Edge Function  │──POST──▶  Meta Graph API    │
+│  (Browser)  │       │  /send-whatsapp          │       │  WhatsApp Cloud API │
+│             │◀─JSON──│  (holds access token)    │◀─JSON──│  v21.0/messages    │
+└─────────────┘       └──────────────────────────┘       └─────────────────────┘
+```
+
+The access token **never** reaches the browser. The Supabase Edge Function acts as a secure proxy.
 
 ## Features
 
-✅ **Automatic WhatsApp Messaging** - Send invitations when uploading guest lists  
-✅ **Status Tracking** - Track delivery status (Success, Pending, Failed, Not Sent)  
-✅ **Number Validation** - Check if phone numbers are on WhatsApp  
-✅ **Custom Message Templates** - Personalized messages with event details  
-✅ **Bulk Messaging** - Send to multiple guests at once  
-✅ **Status Column** - View WhatsApp delivery status in guest list table  
+✅ **Automatic Message Sending** — Messages sent via WhatsApp Business API without manual Send  
+✅ **Fallback to WhatsApp Web** — Falls back to wa.me links if API is not configured  
+✅ **Template Messages** — Support for pre-approved message templates (required for first contact)  
+✅ **Free-form Text Messages** — For conversations within the 24-hour reply window  
+✅ **Error Handling** — Graceful error handling with fallback option  
+✅ **Status Tracking** — Track delivery status (Success, Pending, Failed, Not Sent)  
+✅ **Secure** — API tokens stored as Supabase secrets, never exposed to the client  
 
-## Guest List Table - WhatsApp Status Column
+## Setup Guide
 
-The guest list table now includes a **"WhatsApp Status"** column with the following indicators:
+### Prerequisites
+
+1. A **Meta Business account** — [business.facebook.com](https://business.facebook.com/)
+2. A **Meta Developer account** — [developers.facebook.com](https://developers.facebook.com/)
+3. **Supabase project** — Already configured (see `.env`)
+4. **Supabase CLI** — For deploying Edge Functions
+
+### Step 1: Create a Meta App
+
+1. Go to [developers.facebook.com/apps](https://developers.facebook.com/apps/)
+2. Click **"Create App"**
+3. Select **"Business"** as the app type
+4. Fill in app details and create
+5. Under **"Add Products"**, find **"WhatsApp"** and click **"Set Up"**
+
+### Step 2: Get Your Credentials
+
+From the WhatsApp section in your Meta App dashboard:
+
+1. **Phone Number ID** — Found under WhatsApp > API Setup
+2. **Access Token** — Two options:
+   - **Temporary token** (expires in 24 hours) — Good for testing
+   - **Permanent System User token** (recommended for production):
+     1. Go to [Business Settings > System Users](https://business.facebook.com/settings/system-users)
+     2. Create a System User with Admin role
+     3. Generate a token with `whatsapp_business_messaging` permission
+
+### Step 3: Configure Supabase Secrets
+
+Set the secrets via the Supabase CLI (these are never exposed to the client):
+
+```bash
+# Install Supabase CLI if needed
+npm install -g supabase
+
+# Login to Supabase
+supabase login
+
+# Set the WhatsApp secrets
+supabase secrets set WHATSAPP_ACCESS_TOKEN=your_meta_access_token_here
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id_here
+```
+
+### Step 4: Deploy the Edge Function
+
+```bash
+# From the project root directory
+supabase functions deploy send-whatsapp
+```
+
+### Step 5: Enable in Frontend
+
+In your `.env` file, ensure this is set:
+
+```env
+VITE_WHATSAPP_API_ENABLED=true
+```
+
+When set to `true`, the WhatsApp Message Modal will use the Business API (auto-send).  
+When `false` or missing, it falls back to opening WhatsApp Web (manual send).
+
+### Step 6: Test
+
+1. Start the dev server: `npm run dev`
+2. Go to the Guest List
+3. Click the WhatsApp send icon (📤) on any guest
+4. Type a message and click **"Send Message"**
+5. The message should be delivered automatically to the guest's WhatsApp
+
+## Message Types
+
+### Text Messages (Free-form)
+
+Used within the 24-hour customer service window (after a user messages you first):
+
+```typescript
+import { sendWhatsAppViaAPI } from './lib/whatsappUtils';
+
+const result = await sendWhatsAppViaAPI('+919876543210', 'Hello!');
+if (result.success) {
+  console.log('Sent!', result.messageId);
+}
+```
+
+### Template Messages
+
+Required for first-contact outreach (e.g., sending wedding invitations to guests who haven't messaged you). Templates must be pre-approved in Meta Business Manager.
+
+```typescript
+import { sendWhatsAppTemplate } from './lib/whatsappUtils';
+
+const result = await sendWhatsAppTemplate(
+  '+919876543210',
+  'wedding_invitation',  // template name
+  'en_US',               // language
+  [{
+    type: 'body',
+    parameters: [
+      { type: 'text', text: 'John' },       // {{1}} Guest name
+      { type: 'text', text: 'June 15' },     // {{2}} Date
+    ]
+  }]
+);
+```
+
+To create a template:
+1. Go to Meta Business Manager > WhatsApp Manager > Message Templates
+2. Create a new template with your invitation text
+3. Use placeholders like `{{1}}`, `{{2}}` for dynamic content
+4. Submit for review (usually approved within minutes)
+
+## WhatsApp Status Column
+
+The guest list table includes a **"WhatsApp Status"** column:
 
 | Status | Display | Description |
 |--------|---------|-------------|
 | **Success** | ✓ Sent (Green) | Message delivered successfully |
-| **Pending** | ⏳ Pending (Yellow) | Number not on WhatsApp or awaiting delivery |
+| **Pending** | ⏳ Pending (Yellow) | Awaiting delivery confirmation |
 | **Failed** | ✗ Failed (Red) | Failed to send message |
 | **Not Sent** | — Not Sent (Gray) | Message not sent yet |
 
-## How It Works
-
-### 1. Guest Upload Flow
-
-When you upload a guest list (CSV/Excel):
-
-1. Guests are added to the database
-2. System checks if phone numbers are on WhatsApp
-3. WhatsApp invitations are sent to valid numbers
-4. Status is updated for each guest
-5. Results are displayed in the guest list table
-
-### 2. Message Template
-
-Each guest receives a personalized message like this:
+## File Structure
 
 ```
-🎊 *Wedding Invitation* 🎊
-
-Dear [Guest Name],
-
-You're cordially invited to [Bride & Groom Names]!
-
-📅 Date: [Wedding Date]
-📍 Venue: [Venue Location]
-
-📋 Functions you're invited to:
-• Mehendi
-• Sangeet
-• Wedding Ceremony
-
-Please confirm your attendance by filling out the RSVP form.
-
-We look forward to celebrating with you! 💒✨
-
-With warm regards,
-The [Couple Name] Family
+src/
+├── lib/
+│   ├── whatsappUtils.ts       # WhatsApp API + fallback functions
+│   ├── whatsappService.ts     # Bulk messaging & templates (mock/production)
+│   └── guestUploadService.ts  # Guest upload with WhatsApp integration
+├── components/
+│   └── WhatsAppMessageModal.tsx  # UI modal for sending messages
+supabase/
+└── functions/
+    └── send-whatsapp/
+        └── index.ts           # Edge Function (secure API proxy)
 ```
 
-## Implementation Details
+## Environment Variables
 
-### Current Implementation (Mock)
+### Frontend (.env)
 
-The current implementation uses **mock WhatsApp API calls** for demonstration purposes:
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_WHATSAPP_API_ENABLED` | Enable WhatsApp Business API | `false` |
+| `VITE_SUPABASE_URL` | Supabase project URL | Required |
+| `VITE_SUPABASE_ANON_KEY` | Supabase public anon key | Required |
 
-- ✅ Simulates message sending with realistic delays
-- ✅ 80% of numbers are assumed to be on WhatsApp
-- ✅ 90% success rate for message delivery
-- ✅ Tracks all statuses properly
+### Supabase Secrets (server-side only)
 
-### Production Integration
-
-For **production deployment**, integrate with one of these services:
-
-#### Option 1: Twilio WhatsApp API (Recommended)
-
-```typescript
-// Example implementation in src/lib/whatsappService.ts
-
-import twilio from 'twilio';
-
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const client = twilio(accountSid, authToken);
-
-export async function sendWhatsAppMessage(data: WhatsAppMessage) {
-  try {
-    const message = await client.messages.create({
-      from: 'whatsapp:+14155238886', // Your Twilio WhatsApp number
-      to: `whatsapp:${data.to}`,
-      body: data.message,
-    });
-    
-    return {
-      success: true,
-      status: 'Success',
-      messageId: message.sid,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      status: 'Failed',
-      error: error.message,
-    };
-  }
-}
-```
-
-**Setup Steps:**
-1. Sign up at [Twilio](https://www.twilio.com/)
-2. Get WhatsApp API access
-3. Add credentials to `.env` file:
-   ```env
-   TWILIO_ACCOUNT_SID=your_account_sid
-   TWILIO_AUTH_TOKEN=your_auth_token
-   TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
-   ```
-4. Replace mock implementation in `src/lib/whatsappService.ts`
-
-#### Option 2: WhatsApp Business API
-
-Contact Meta to get WhatsApp Business API access:
-- [WhatsApp Business Platform](https://business.whatsapp.com/)
-- [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api)
-
-#### Option 3: Other Providers
-
-- **MessageBird** - https://messagebird.com/
-- **Vonage** - https://www.vonage.com/
-- **Plivo** - https://www.plivo.com/
-
-## Usage
-
-### Using the Upload Service
-
-```typescript
-import { uploadGuestsWithWhatsApp } from './lib/guestUploadService';
-
-// Upload guests with WhatsApp messaging
-const result = await uploadGuestsWithWhatsApp(
-  guestList,
-  eventId,
-  true // sendWhatsApp = true
-);
-
-console.log('Upload Results:', result);
-// {
-//   success: true,
-//   totalGuests: 50,
-//   uploadedGuests: [...],
-//   whatsappResults: {
-//     sent: 40,
-//     pending: 5,
-//     failed: 3,
-//     notSent: 2
-//   }
-// }
-```
-
-### Updating Guest WhatsApp Status
-
-```typescript
-import { updateGuestWhatsAppStatus } from './lib/db';
-
-// Update status after sending
-updateGuestWhatsAppStatus(
-  guestId,
-  'Success', // or 'Pending', 'Failed', 'Not Sent'
-  new Date().toISOString()
-);
-```
-
-### Customizing Message Template
-
-Edit the `generateGuestMessage` function in `src/lib/whatsappService.ts`:
-
-```typescript
-export function generateGuestMessage(
-  guestName: string,
-  eventName: string,
-  eventDate: string,
-  venue: string,
-  functions: string[]
-): string {
-  // Customize your message template here
-  return `Your custom message...`;
-}
-```
-
-## API Reference
-
-### WhatsApp Service (`src/lib/whatsappService.ts`)
-
-#### `sendWhatsAppMessage(data: WhatsAppMessage)`
-Send a single WhatsApp message.
-
-**Parameters:**
-- `data.to` - Phone number in international format (+919876543210)
-- `data.message` - Message content
-- `data.eventName` - Optional event name
-- `data.guestName` - Optional guest name
-
-**Returns:** `Promise<WhatsAppResponse>`
-
-#### `sendBulkWhatsAppMessages(messages: WhatsAppMessage[])`
-Send messages to multiple recipients.
-
-**Returns:** `Promise<Array<WhatsAppResponse>>`
-
-#### `formatPhoneNumber(mobile: string, countryCode?: string)`
-Format phone number to international format.
-
-**Returns:** `string` (e.g., +919876543210)
-
-#### `isNumberOnWhatsApp(phoneNumber: string)`
-Check if a number is on WhatsApp.
-
-**Returns:** `Promise<boolean>`
-
-### Guest Upload Service (`src/lib/guestUploadService.ts`)
-
-#### `uploadGuestsWithWhatsApp(guestList, eventId, sendWhatsApp?)`
-Upload guests and send WhatsApp invitations.
-
-**Parameters:**
-- `guestList` - Array of guests to upload
-- `eventId` - Event ID
-- `sendWhatsApp` - Whether to send WhatsApp messages (default: true)
-
-**Returns:** `Promise<GuestUploadResult>`
-
-### Database Functions (`src/lib/db.ts`)
-
-#### `updateGuestWhatsAppStatus(guestId, status, sentAt?)`
-Update WhatsApp delivery status for a guest.
-
-#### `addGuestsBulkWithWhatsApp(guestList, eventId, sendWhatsApp?)`
-Add guests in bulk with WhatsApp support.
-
-## Testing
-
-### Mock Mode (Current)
-
-The current implementation is in **mock mode** - it simulates WhatsApp API calls without actually sending messages. Perfect for development and testing!
-
-To test:
-1. Upload a guest list via the UI
-2. Check the "WhatsApp Status" column in the guest list table
-3. View browser console for mock message logs
-
-### Production Testing
-
-Before going live:
-1. ✅ Test with real WhatsApp numbers
-2. ✅ Verify message delivery
-3. ✅ Check rate limits and quotas
-4. ✅ Test error handling
-5. ✅ Verify status updates
+| Secret | Description |
+|--------|-------------|
+| `WHATSAPP_ACCESS_TOKEN` | Meta System User access token |
+| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp Business phone number ID |
 
 ## Rate Limiting
 
-Be mindful of WhatsApp API rate limits:
+WhatsApp Business API rate limits:
 
-- **Twilio**: 
-  - 1 message per second (free tier)
-  - Higher limits available on paid plans
-- **WhatsApp Business API**:
-  - Tier-based messaging limits
-  - Starts at 1,000 messages/day
+| Tier | Unique Contacts/Day | How to Upgrade |
+|------|---------------------|----------------|
+| Tier 1 (New) | 1,000 | Send 2x current limit in 7 days |
+| Tier 2 | 10,000 | Send 2x current limit in 7 days |
+| Tier 3 | 100,000 | Send 2x current limit in 7 days |
+| Tier 4 | Unlimited | Automatic after Tier 3 |
 
-Add delays between messages in bulk sending (already implemented with 300ms delay).
+## Pricing
+
+WhatsApp Business API uses conversation-based pricing:
+
+- **Utility conversations**: ~$0.005–$0.02
+- **Marketing conversations**: ~$0.02–$0.08
+- **Service conversations** (user-initiated): Free (first 1,000/month)
+
+Check current pricing at [Meta's pricing page](https://developers.facebook.com/docs/whatsapp/pricing/).
 
 ## Troubleshooting
 
-### Messages not sending?
+### "WhatsApp API is not configured"
 
-1. **Check phone number format** - Must be in international format (+91...)
-2. **Verify API credentials** - Check your .env file
-3. **Check API quota** - Ensure you haven't hit rate limits
-4. **Review logs** - Check browser/server console for errors
+→ Set the Supabase secrets:
+```bash
+supabase secrets set WHATSAPP_ACCESS_TOKEN=your_token
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=your_phone_id
+```
 
-### Status showing "Pending"?
+### "Failed to send WhatsApp message" (Error 131030)
 
-This means:
-- Number is not on WhatsApp, OR
-- Message is queued for delivery
+→ You're trying to send a free-form text to a number that hasn't messaged you first. Use a **template message** instead.
 
-### Status showing "Failed"?
+### "Invalid phone number" 
 
-This can happen due to:
-- Invalid phone number
-- API errors
-- Network issues
-- Number blocked by WhatsApp
+→ Ensure the number is in international format without the `+` prefix (e.g., `919876543210`).
 
-## Security Considerations
+### Edge Function not found (404)
+
+→ Deploy the function:
+```bash
+supabase functions deploy send-whatsapp
+```
+
+### Messages not being received
+
+1. Check the phone number is registered on WhatsApp
+2. Verify your access token hasn't expired
+3. Check Supabase Edge Function logs: `supabase functions logs send-whatsapp`
+4. Check Meta's WhatsApp Manager for delivery status
+
+## Security
 
 🔒 **Best Practices:**
 
-1. **Never commit API keys** - Use environment variables
-2. **Validate phone numbers** - Before sending messages
-3. **Rate limiting** - Prevent API abuse
-4. **User consent** - Ensure guests have opted in for messages
-5. **GDPR compliance** - Handle phone numbers securely
-
-## Costs
-
-### Twilio WhatsApp Pricing (as of 2024)
-
-- **Conversation-based pricing**: $0.005 - $0.05 per conversation
-- **Free trial**: $15 credit to test
-- **Volume discounts**: Available for high-volume senders
-
-### Other Providers
-
-Check current pricing on respective provider websites.
-
-## Support
-
-For WhatsApp integration issues:
-- Twilio Support: https://support.twilio.com/
-- WhatsApp Business: https://business.whatsapp.com/support
-
-## Future Enhancements
-
-Potential improvements:
-- [ ] Retry failed messages automatically
-- [ ] Schedule messages for specific times
-- [ ] Message templates with rich media (images, PDFs)
-- [ ] Delivery receipts and read confirmations
-- [ ] Two-way messaging (guest replies)
-- [ ] WhatsApp chatbot integration
+1. **Access token is server-side only** — Stored as Supabase secret, never in `.env` or client code
+2. **CORS configured** — Edge Function only accepts POST requests
+3. **Input validation** — Phone numbers and messages validated before API call
+4. **Error messages sanitized** — Internal API errors not leaked to the client
+5. **Never commit secrets** — Use `supabase secrets set` for sensitive values
 
 ---
 
