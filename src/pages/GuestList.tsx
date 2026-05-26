@@ -16,6 +16,7 @@ import { parseGuestListFile } from '../lib/guestListParser';
 import { formatMobileForDisplay } from '../lib/constants';
 import ColumnFilterHeader, { getColumnValue, type ColumnFilter } from '../components/ColumnFilterHeader';
 import DocumentsModal from '../components/DocumentsModal';
+import WhatsAppMessageModal from '../components/WhatsAppMessageModal';
 import {
   Heart,
   Search,
@@ -191,6 +192,10 @@ export default function GuestList() {
   const [guestsPendingDelete, setGuestsPendingDelete] = useState<Guest[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  // WhatsApp message modal state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [selectedGuestForWhatsApp, setSelectedGuestForWhatsApp] = useState<Guest | null>(null);
 
   // Toast notification state
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -512,6 +517,16 @@ export default function GuestList() {
     setMessageError('');
     setMessageSuccess('');
     setShowMessageModal(true);
+  };
+
+  const openWhatsAppMessageModal = (guest: Guest) => {
+    setSelectedGuestForWhatsApp(guest);
+    setShowWhatsAppModal(true);
+  };
+
+  const closeWhatsAppMessageModal = () => {
+    setShowWhatsAppModal(false);
+    setSelectedGuestForWhatsApp(null);
   };
 
   const handleSendMessage = async () => {
@@ -1079,6 +1094,13 @@ export default function GuestList() {
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button
+                                onClick={() => openWhatsAppMessageModal(guest)}
+                                className="inline-flex items-center justify-center text-gray-500 hover:text-green-600 transition-colors p-1.5 hover:bg-green-50 rounded"
+                                title="Send WhatsApp message"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                              <button
                                 onClick={() => openMessageModal(guest)}
                                 className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-1.5 hover:bg-rose-50 rounded"
                                 title="Send message"
@@ -1580,6 +1602,15 @@ export default function GuestList() {
               }
             }
           }}
+        />
+      )}
+
+      {/* WhatsApp Message Modal */}
+      {showWhatsAppModal && selectedGuestForWhatsApp && (
+        <WhatsAppMessageModal
+          guest={selectedGuestForWhatsApp}
+          isOpen={showWhatsAppModal}
+          onClose={closeWhatsAppMessageModal}
         />
       )}
     </div>
