@@ -377,18 +377,122 @@ export default function RSVPForm() {
     const failedDocs: { name: string; error: string }[] = [];
     
     for (const file of formData.uploadedDocuments) {
+  try {
+    console.log(`RSVPForm: Converting document: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(1)} KB)`);
+
+    const doc = await createGuestDocument(file, '', 'guest');
+
+    documents.push(doc);
+
+    console.log(`RSVPForm: ✓ Successfully converted: ${file.name}`);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`RSVPForm: ✗ Failed to process ${file.name}:`, errorMsg);
+    failedDocs.push({ name: file.name, error: errorMsg });
+  }
+}
+
+    // Process main guest's ID documents (front and back)
+    if (formData.idFront) {
       try {
-        console.log(`RSVPForm: Converting document: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(1)} KB)`);
-        const doc = await createGuestDocument(file, '', 'guest');
+        console.log(`RSVPForm: Converting ID front: ${formData.idFront.name}`);
+        const doc = await createGuestDocument(
+          formData.idFront,
+          '',
+          'guest',
+          undefined,
+          `${formData.idType} - Front`
+        );
         documents.push(doc);
-        console.log(`RSVPForm: ✓ Successfully converted: ${file.name}`);
+        console.log(`RSVPForm: ✓ Successfully converted ID front`);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`RSVPForm: ✗ Failed to process ${file.name}:`, errorMsg);
-        failedDocs.push({ name: file.name, error: errorMsg });
+        console.error(`RSVPForm: ✗ Failed to process ID front:`, errorMsg);
+        failedDocs.push({ name: formData.idFront.name, error: errorMsg });
       }
     }
-    
+
+    if (formData.idBack) {
+      try {
+        console.log(`RSVPForm: Converting ID back: ${formData.idBack.name}`);
+        const doc = await createGuestDocument(
+          formData.idBack,
+          '',
+          'guest',
+          undefined,
+          `${formData.idType} - Back`
+        );
+        documents.push(doc);
+        console.log(`RSVPForm: ✓ Successfully converted ID back`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`RSVPForm: ✗ Failed to process ID back:`, errorMsg);
+        failedDocs.push({ name: formData.idBack.name, error: errorMsg });
+      }
+    }
+
+    // Process main guest's flight ticket
+    if (formData.flightTicket) {
+      try {
+        console.log(`RSVPForm: Converting flight ticket: ${formData.flightTicket.name}`);
+        const doc = await createGuestDocument(
+          formData.flightTicket,
+          '',
+          'guest',
+          undefined,
+          'Flight Ticket'
+        );
+        documents.push(doc);
+        console.log(`RSVPForm: ✓ Successfully converted flight ticket`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`RSVPForm: ✗ Failed to process flight ticket:`, errorMsg);
+        failedDocs.push({ name: formData.flightTicket.name, error: errorMsg });
+      }
+    }
+
+    // Process main guest's train ticket
+    if (formData.trainTicket) {
+      try {
+        console.log(`RSVPForm: Converting train ticket: ${formData.trainTicket.name}`);
+        const doc = await createGuestDocument(
+          formData.trainTicket,
+          '',
+          'guest',
+          undefined,
+          'Train Ticket'
+        );
+        documents.push(doc);
+        console.log(`RSVPForm: ✓ Successfully converted train ticket`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`RSVPForm: ✗ Failed to process train ticket:`, errorMsg);
+        failedDocs.push({ name: formData.trainTicket.name, error: errorMsg });
+      }
+    }
+
+    // Process additional guests' travel tickets
+    for (const guest of formData.additionalGuests) {
+      if (guest.ticketFile) {
+        try {
+          console.log(`RSVPForm: Converting ${guest.name}'s travel ticket: ${guest.ticketFile.name}`);
+          const doc = await createGuestDocument(
+            guest.ticketFile,
+            '',
+            'guest',
+            undefined,
+            `${guest.name} - Travel Ticket`
+          );
+          documents.push(doc);
+          console.log(`RSVPForm: ✓ Successfully converted ${guest.name}'s travel ticket`);
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+          console.error(`RSVPForm: ✗ Failed to process ${guest.name}'s travel ticket:`, errorMsg);
+          failedDocs.push({ name: guest.ticketFile.name, error: errorMsg });
+        }
+      }
+    }
+
     console.log(`RSVPForm: Conversion complete - ${documents.length} succeeded, ${failedDocs.length} failed`);
     
     if (failedDocs.length > 0) {
@@ -407,6 +511,12 @@ export default function RSVPForm() {
     console.log('documents.length:', documents.length);
     console.log('documents array:', documents);
     console.log('Passing to addGuest - documents field:', documents.length > 0 ? documents : undefined);
+
+    // ADD THIS
+    console.log('=== DEBUG DOCUMENTS BEFORE GUEST DATA ===');
+    console.log('documents variable:', documents);
+    console.log('documents.length:', documents.length);
+    console.log('first document:', documents[0]);
 
     try {
       const guestData = {

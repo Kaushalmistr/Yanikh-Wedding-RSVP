@@ -98,6 +98,22 @@ interface WeddingEvent {
 }
 ```
 
+### Guest Document
+```typescript
+interface GuestDocument {
+  id: string;
+  fileName: string;          // Original file name
+  fileType: string;          // MIME type (e.g., 'image/jpeg', 'application/pdf')
+  fileSize: number;          // File size in bytes
+  base64Data: string;        // Base64-encoded file content
+  uploadedAt: string;        // ISO timestamp
+  uploadedBy: 'guest' | 'admin';
+  guestId: string;           // Guest who uploaded the document
+  relatedGuestId?: string;   // Reference to related guest (optional)
+  description?: string;      // Document type (e.g., 'Flight Ticket', 'Aadhaar Card - Front')
+}
+```
+
 ### Guest RSVP Response
 ```typescript
 interface Guest {
@@ -159,6 +175,9 @@ interface Guest {
   idNumber?: string;         // Format validated based on idType
   idFront?: File;            // Validated: Images + PDF only, max 5MB
   idBack?: File;             // Validated: Images + PDF only, max 5MB
+  
+  // Documents Uploaded with RSVP
+  documents?: GuestDocument[]; // All uploaded documents (ID, tickets, etc.)
   
   // Food & Preferences
   mealPreference: string;
@@ -611,7 +630,19 @@ Message History Tab:
 - Filter by various criteria
 - Track guest count statistics
 
-### 7. Data Export
+### 7. Document Management
+- Upload and store documents (ID proofs, travel tickets) with RSVP form
+- Automatic document sync: documents uploaded in RSVP form immediately appear in Guest List
+- All document types persisted and displayed:
+  - **ID Documents:** Aadhaar Card Front/Back, Passport Front/Back, Driving License Front/Back, Voter ID Front/Back
+  - **Travel Documents:** Flight Tickets, Train Tickets (for main guest and all additional guests)
+  - **General Documents:** Additional files via uploadedDocuments array
+- Documents stored as GuestDocument objects (base64-encoded with metadata)
+- DocumentsModal component for viewing/downloading documents per guest
+- No re-upload required - all documents immediately visible after RSVP submission
+- File validation: Images (JPG, PNG, WEBP, GIF, BMP) + PDF only, max 10MB
+
+### 8. Data Export
 - Export guest list to Excel format
 - Includes all guest information
 - Formatted spreadsheet with proper headers
@@ -701,6 +732,19 @@ AuthContext
   - Then tries email match if provided
   - Finally tries partial name match
   - Returns matching guest or undefined
+
+### Document Management Operations (documentService.ts)
+- `createGuestDocument(file, guestId, uploadedBy, relatedGuestId?, description?)` - Convert File to GuestDocument
+- `fileToBase64(file)` - Convert File object to base64 string
+- `base64ToBlob(base64, contentType)` - Convert base64 to Blob for download
+- `validateDocumentFile(file)` - Validate file type and size
+- `downloadDocument(document)` - Download single document as file
+- `downloadMultipleDocuments(documents)` - Download multiple documents
+- `downloadDocumentsAsZip(documents, guestName)` - Download multiple with naming pattern
+- `getFileIcon(fileType)` - Get emoji icon for file type (🖼️ for images, 📄 for PDF)
+- `formatFileSize(bytes)` - Format file size for display
+- `getPreviewUrl(document)` - Get preview URL for image documents
+- `uploadGuestDocument(file, eventId, guestId, fileName)` - Upload to Supabase storage
 
 ### Guest List File Parsing
 - `parseGuestListFile(file)` - Parse Excel/CSV file and extract guest data with flexible column matching
@@ -1034,14 +1078,16 @@ npm run preview
 | `AuthContext.tsx` | Global authentication state |
 | `db.ts` | localStorage CRUD operations |
 | `constants.ts` | App-wide constants, country codes, and validation functions |
+| `documentService.ts` | Document management utilities (convert, validate, download) |
 | `guestListParser.ts` | Parse Excel/CSV files and detect event attendance |
 | `App.tsx` | Route configuration & auth protection |
 | `Dashboard.tsx` | Event list & management interface |
 | `CreateEvent.tsx` | Event creation form |
 | `EventDetail.tsx` | Event details, feature cards, guest list |
-| `GuestList.tsx` | Full-width guest list table view |
-| `RSVPForm.tsx` | Multi-step RSVP collection form with comprehensive validation |
+| `GuestList.tsx` | Full-width guest list table view with document sync |
+| `RSVPForm.tsx` | Multi-step RSVP collection form with comprehensive validation and document upload |
 | `BulkMessaging.tsx` | Bulk messaging and auto-send features |
+| `DocumentsModal.tsx` | Modal for viewing/managing guest documents |
 
 ---
 
@@ -1331,8 +1377,34 @@ All input fields implement real-time character filtering to prevent invalid inpu
   - **Auto-clear selection** when filters or search criteria changes
   - **Instant guest list updates** after successful deletion
 
+- **v1.3** - Document Management & Sync (May 26, 2026)
+  - **Document Upload Sync**: All uploaded documents now immediately appear in Guest List
+  - **ID Document Uploads**: 
+    - Aadhaar Card front and back
+    - Passport, Driving License, Voter ID front and back
+    - Stored as GuestDocument objects with full metadata
+    - Descriptive names (e.g., "Aadhaar Card - Front", "Aadhaar Card - Back")
+  - **Travel Document Uploads**:
+    - Flight tickets (main guest and all additional guests)
+    - Train tickets (main guest and all additional guests)
+    - Stored with descriptions like "Flight Ticket", "Train Ticket", "[Guest Name] - Travel Ticket"
+  - **DocumentsModal Component**:
+    - View and manage documents for each guest
+    - Download individual documents or multiple documents
+    - Document preview for images
+    - File icons and metadata display
+  - **Document Persistence**:
+    - Base64-encoded storage for client-side persistence
+    - All documents saved in Guest.documents array
+    - GuestDocument interface with metadata (name, type, size, upload date)
+    - No re-upload required after form submission
+  - **File Type & Size Validation**:
+    - Allowed formats: Images (JPG, PNG, WEBP, GIF, BMP) + PDF
+    - Max size: 10MB per document
+    - Validation errors with clear messages
+
 ---
 
-**Last Updated:** May 18, 2026  
+**Last Updated:** May 26, 2026  
 **Maintainers:** [Project Team]  
 **Repository:** Yanikh-Wedding-RSVP

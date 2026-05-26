@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { GuestDocument } from './db';
-
+import { supabase } from './supabase';
 /**
  * Convert a File object to base64 string
  */
@@ -182,4 +182,40 @@ export function getPreviewUrl(document: GuestDocument): string | null {
     return document.base64Data;
   }
   return null;
+}
+
+/**
+ * Upload guest document to Supabase Storage
+ */
+export async function uploadGuestDocument(
+  file: File,
+  eventId: string,
+  guestId: string,
+  fileName: string
+): Promise<string> {
+  // Validate file first
+  const validation = validateDocumentFile(file);
+
+  if (!validation.isValid) {
+    throw new Error(validation.error);
+  }
+
+  // Get file extension
+  const extension = file.name.split('.').pop();
+
+  // Create storage path
+  const filePath = `${eventId}/${guestId}/${fileName}.${extension}`;
+
+  // Upload to Supabase bucket
+  const { data, error } = await supabase.storage
+    .from('guest-documents')
+    .upload(filePath, file, {
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.path;
 }
