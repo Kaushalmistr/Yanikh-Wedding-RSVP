@@ -47,7 +47,8 @@
 │   │   ├── constants.ts         # App-wide constants
 │   │   ├── db.ts                # Database layer (localStorage CRUD)
 │   │   ├── guestListParser.ts   # Excel/CSV file parsing and event detection
-│   │   └── supabase.ts          # Placeholder for Supabase
+│   │   ├── whatsappUtils.ts     # WhatsApp API & wa.me integration utilities
+│   │   └── supabase.ts          # Supabase client instantiation
 │   ├── pages/
 │   │   ├── AuthPage.tsx         # Login/Signup page
 │   │   ├── Dashboard.tsx        # Events list & management
@@ -58,12 +59,19 @@
 │   │   └── BulkMessaging.tsx    # Bulk messaging & auto-send features
 │   ├── utils/
 │   │   └── cn.ts                # Tailwind class utilities
+│   ├── components/
+│   │   └── WhatsAppMessageModal.tsx # Send WhatsApp message modal
+├── supabase/
+│   └── functions/
+│       └── send-whatsapp/
+│           └── index.ts        # Supabase Edge Function (WhatsApp API Secure Proxy)
 ├── public/
 │   └── images/                  # Static assets
 ├── index.html                   # HTML entry point
 ├── tsconfig.json                # TypeScript config
 ├── vite.config.ts               # Vite config
 ├── package.json                 # Dependencies
+├── WHATSAPP_INTEGRATION.md      # WhatsApp Integration setup instructions
 └── README.md                     # Project documentation
 ```
 
@@ -1078,8 +1086,10 @@ npm run preview
 | `AuthContext.tsx` | Global authentication state |
 | `db.ts` | localStorage CRUD operations |
 | `constants.ts` | App-wide constants, country codes, and validation functions |
+| `whatsappUtils.ts` | WhatsApp integration utilities (API calling & wa.me fallback) |
 | `documentService.ts` | Document management utilities (convert, validate, download) |
 | `guestListParser.ts` | Parse Excel/CSV files and detect event attendance |
+| `send-whatsapp/index.ts` | Supabase Edge Function (WhatsApp Business Cloud API Proxy) |
 | `App.tsx` | Route configuration & auth protection |
 | `Dashboard.tsx` | Event list & management interface |
 | `CreateEvent.tsx` | Event creation form |
@@ -1088,6 +1098,7 @@ npm run preview
 | `RSVPForm.tsx` | Multi-step RSVP collection form with comprehensive validation and document upload |
 | `BulkMessaging.tsx` | Bulk messaging and auto-send features |
 | `DocumentsModal.tsx` | Modal for viewing/managing guest documents |
+| `WhatsAppMessageModal.tsx` | Modal interface to type and send WhatsApp messages |
 
 ---
 
@@ -1402,6 +1413,13 @@ All input fields implement real-time character filtering to prevent invalid inpu
     - Allowed formats: Images (JPG, PNG, WEBP, GIF, BMP) + PDF
     - Max size: 10MB per document
     - Validation errors with clear messages
+
+- **v1.4** - WhatsApp Business Cloud API Integration (May 26, 2026)
+  - **Direct WhatsApp API Sending**: Implemented automated background messaging using Meta's WhatsApp Business Cloud API, eliminating the need to manually press "Send" in WhatsApp Web.
+  - **Supabase Edge Function Proxy**: Created a Deno-based secure serverless function `send-whatsapp` to act as a proxy, securely holding Meta credentials without exposing them to the client.
+  - **Fallback to wa.me**: Configured the React client to gracefully fall back to opening the standard `wa.me` links if the Business API is disabled or not set up.
+  - **Messaging Modal Integration**: Redesigned `WhatsAppMessageModal` to handle API calling status (idle, sending, success, error) and show dynamic in-app feedback.
+  - **Comprehensive Documentation**: Added a setup guide in `WHATSAPP_INTEGRATION.md` detailing Meta App creation, permanent system user tokens, and Supabase deployment.
 
 ---
 
