@@ -9,9 +9,11 @@ import {
 } from '../lib/whatsappUtils';
 import { formatMobileForWhatsApp } from '../lib/constants';
 import type { Guest } from '../lib/db';
+import type { WhatsAppSender } from './SelectSenderModal';
 
 interface WhatsAppMessageModalProps {
   guest: Guest;
+  sender: WhatsAppSender;
   isOpen: boolean;
   onClose: () => void;
   onMessageSent?: (guestId: string, success: boolean) => void;
@@ -21,6 +23,7 @@ type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'fallback';
 
 export default function WhatsAppMessageModal({
   guest,
+  sender,
   isOpen,
   onClose,
   onMessageSent,
@@ -192,21 +195,40 @@ export default function WhatsAppMessageModal({
             </div>
           )}
 
-          {/* Guest Info */}
-          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-            <p className="text-sm font-medium text-green-900 mb-2">
-              Sending to:
-            </p>
-            <div className="space-y-1">
-              <p className="text-green-800 font-semibold">{guest.name}</p>
-              <p className="text-green-700 text-sm">
-                📱 {formatMobileForDisplay(guest.mobile, guest.countryCode || 'IN')}
+          {/* Guest and Sender Info Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Guest Info */}
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <p className="text-sm font-medium text-green-900 mb-2">
+                Sending to:
               </p>
-              {guest.email && (
+              <div className="space-y-1">
+                <p className="text-green-800 font-semibold">{guest.name}</p>
                 <p className="text-green-700 text-sm">
-                  📧 {guest.email}
+                  📱 {formatMobileForDisplay(guest.mobile, guest.countryCode || 'IN')}
                 </p>
-              )}
+                {guest.email && (
+                  <p className="text-green-700 text-sm">
+                    📧 {guest.email}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Sender Info */}
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <p className="text-sm font-medium text-blue-900 mb-2">
+                Sending via:
+              </p>
+              <div className="space-y-1">
+                <p className="text-blue-800 font-semibold">{sender.name}</p>
+                <p className="text-blue-700 text-sm">
+                  📱 {sender.phoneNumber}
+                </p>
+                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {sender.status}
+                </span>
+              </div>
             </div>
           </div>
 
