@@ -17,6 +17,7 @@ import { formatMobileForDisplay } from '../lib/constants';
 import ColumnFilterHeader, { getColumnValue, type ColumnFilter } from '../components/ColumnFilterHeader';
 import DocumentsModal from '../components/DocumentsModal';
 import WhatsAppMessageModal from '../components/WhatsAppMessageModal';
+import WhatsAppComposerModal from '../components/WhatsAppComposerModal';
 import SelectSenderModal, { type WhatsAppSender } from '../components/SelectSenderModal';
 import {
   Heart,
@@ -199,6 +200,8 @@ export default function GuestList() {
   const [selectedGuestForWhatsApp, setSelectedGuestForWhatsApp] = useState<Guest | null>(null);
   const [showSenderModal, setShowSenderModal] = useState(false);
   const [selectedWhatsAppSender, setSelectedWhatsAppSender] = useState<WhatsAppSender | null>(null);
+  const [showComposerModal, setShowComposerModal] = useState(false);
+  const [composedMessage, setComposedMessage] = useState<string>('');
 
   // Toast notification state
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -537,6 +540,17 @@ export default function GuestList() {
   const handleWhatsAppSenderSelect = (sender: WhatsAppSender) => {
     setSelectedWhatsAppSender(sender);
     setShowSenderModal(false);
+    setShowComposerModal(true);
+  };
+
+  const closeWhatsAppComposerModal = () => {
+    setShowComposerModal(false);
+    setComposedMessage('');
+  };
+
+  const handleWhatsAppCompose = (message: string) => {
+    setComposedMessage(message);
+    setShowComposerModal(false);
     setShowWhatsAppModal(true);
   };
 
@@ -544,6 +558,7 @@ export default function GuestList() {
     setShowWhatsAppModal(false);
     setSelectedGuestForWhatsApp(null);
     setSelectedWhatsAppSender(null);
+    setComposedMessage('');
   };
 
   const handleSendMessage = async () => {
@@ -1636,6 +1651,17 @@ export default function GuestList() {
         />
       )}
 
+      {/* WhatsApp Composer Modal */}
+      {showComposerModal && selectedGuestForWhatsApp && selectedWhatsAppSender && (
+        <WhatsAppComposerModal
+          guest={selectedGuestForWhatsApp}
+          sender={selectedWhatsAppSender}
+          isOpen={showComposerModal}
+          onClose={closeWhatsAppComposerModal}
+          onCompose={handleWhatsAppCompose}
+        />
+      )}
+
       {/* WhatsApp Message Modal */}
       {showWhatsAppModal && selectedGuestForWhatsApp && selectedWhatsAppSender && (
         <WhatsAppMessageModal
@@ -1643,6 +1669,7 @@ export default function GuestList() {
           sender={selectedWhatsAppSender}
           isOpen={showWhatsAppModal}
           onClose={closeWhatsAppMessageModal}
+          initialMessage={composedMessage}
         />
       )}
     </div>

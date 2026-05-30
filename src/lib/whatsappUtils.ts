@@ -203,3 +203,49 @@ export function isValidWhatsAppNumber(phoneNumber: string): boolean {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
   return cleanPhone.length >= 7 && cleanPhone.length <= 15;
 }
+
+// ─── Message Placeholder Replacement ────────────────────────────────────────
+
+/**
+ * Replace dynamic placeholders in a message with actual values
+ * Supported placeholders:
+ * - {guestName} → Guest's full name
+ * - {guestId} → Guest's unique ID
+ * - {eventName} → Wedding event name (groom + bride)
+ * 
+ * @param message - Message containing placeholders
+ * @param guestName - Guest's full name
+ * @param guestId - Guest's unique ID (optional)
+ * @param eventName - Wedding event name (optional)
+ * @returns Message with placeholders replaced
+ *
+ * @example
+ * const msg = 'Dear {guestName}, we invite you to our wedding!';
+ * replacePlaceholders(msg, 'Rahul Sharma', 'guest-123', 'Yuvraj & Nanki');
+ * // Returns: 'Dear Rahul Sharma, we invite you to our wedding!'
+ */
+export function replacePlaceholders(
+  message: string,
+  guestName: string,
+  guestId?: string,
+  eventName?: string
+): string {
+  let result = message;
+
+  // Replace {guestName} with actual guest name
+  if (guestName) {
+    result = result.replace(/{guestName}/g, guestName);
+  }
+
+  // Replace {guestId} with actual guest ID
+  if (guestId) {
+    result = result.replace(/{guestId}/g, guestId);
+  }
+
+  // Replace {eventName} with actual event name
+  if (eventName) {
+    result = result.replace(/{eventName}/g, eventName);
+  }
+
+  return result;
+}
