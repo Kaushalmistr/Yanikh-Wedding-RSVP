@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Send, X, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { formatMobileForDisplay } from '../lib/constants';
 import {
@@ -6,6 +6,7 @@ import {
   sendWhatsAppViaAPI,
   openWhatsAppWeb,
   isValidWhatsAppNumber,
+  replacePlaceholders,
 } from '../lib/whatsappUtils';
 import { formatMobileForWhatsApp } from '../lib/constants';
 import type { Guest } from '../lib/db';
@@ -17,6 +18,7 @@ interface WhatsAppMessageModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMessageSent?: (guestId: string, success: boolean) => void;
+  initialMessage?: string;
 }
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'fallback';
@@ -27,13 +29,21 @@ export default function WhatsAppMessageModal({
   isOpen,
   onClose,
   onMessageSent,
+  initialMessage = '',
 }: WhatsAppMessageModalProps) {
-  const [messageText, setMessageText] = useState('');
+  const [messageText, setMessageText] = useState(initialMessage);
   const [error, setError] = useState('');
   const [sendStatus, setSendStatus] = useState<SendStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
 
   const apiEnabled = isWhatsAppAPIEnabled();
+
+  // Update message when initialMessage changes (e.g., from composer modal)
+  useEffect(() => {
+    if (isOpen && initialMessage) {
+      setMessageText(initialMessage);
+    }
+  }, [isOpen, initialMessage]);
 
   if (!isOpen) return null;
 
@@ -59,12 +69,19 @@ export default function WhatsAppMessageModal({
       return;
     }
 
+    // Replace dynamic placeholders with actual guest information
+    const processedMessage = replacePlaceholders(
+      messageText,
+      guest.name,
+      guest.id
+    );
+
     if (apiEnabled) {
       // ── WhatsApp Business API (auto-send) ──
       try {
         setSendStatus('sending');
 
-        const result = await sendWhatsAppViaAPI(formattedPhone, messageText);
+        const result = await sendWhatsAppViaAPI(formattedPhone, processedMessage);
 
         if (result.success) {
           setSendStatus('success');
@@ -90,7 +107,7 @@ export default function WhatsAppMessageModal({
       // ── Fallback: Open WhatsApp Web with prefilled message ──
       try {
         setSendStatus('fallback');
-        openWhatsAppWeb(formattedPhone, messageText);
+        openWhatsAppWeb(formattedPhone, processedMessage);
         setStatusMessage('WhatsApp Web opened — press Send in WhatsApp to deliver.');
 
         // Close modal after a short delay to allow the window to open
@@ -172,7 +189,8 @@ export default function WhatsAppMessageModal({
                         guest.mobile,
                         guest.countryCode || 'IN'
                       );
-                      openWhatsAppWeb(formattedPhone, messageText);
+                      const processedMsg = replacePlaceholders(messageText, guest.name, guest.id);
+                      openWhatsAppWeb(formattedPhone, processedMsg);
                       setStatusMessage('Opened WhatsApp Web as fallback.');
                       setSendStatus('fallback');
                       setError('');
