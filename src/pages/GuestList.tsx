@@ -16,6 +16,9 @@ import { parseGuestListFile } from '../lib/guestListParser';
 import { formatMobileForDisplay } from '../lib/constants';
 import ColumnFilterHeader, { getColumnValue, type ColumnFilter } from '../components/ColumnFilterHeader';
 import DocumentsModal from '../components/DocumentsModal';
+import WhatsAppMessageModal from '../components/WhatsAppMessageModal';
+import WhatsAppComposerModal from '../components/WhatsAppComposerModal';
+import SelectSenderModal, { type WhatsAppSender } from '../components/SelectSenderModal';
 import {
   Heart,
   Search,
@@ -140,7 +143,6 @@ function buildGuestPayload(
     idNumber: existing?.idNumber,
     idFrontFile: existing?.idFrontFile,
     idBackFile: existing?.idBackFile,
-    mealPreference: existing?.mealPreference ?? '',
     dietaryRestrictions: existing?.dietaryRestrictions ?? '',
     specialAssistance: existing?.specialAssistance ?? [],
     celebrationParticipation: existing?.celebrationParticipation ?? [],
@@ -192,6 +194,14 @@ export default function GuestList() {
   const [guestsPendingDelete, setGuestsPendingDelete] = useState<Guest[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  // WhatsApp message modal state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [selectedGuestForWhatsApp, setSelectedGuestForWhatsApp] = useState<Guest | null>(null);
+  const [showSenderModal, setShowSenderModal] = useState(false);
+  const [selectedWhatsAppSender, setSelectedWhatsAppSender] = useState<WhatsAppSender | null>(null);
+  const [showComposerModal, setShowComposerModal] = useState(false);
+  const [composedMessage, setComposedMessage] = useState<string>('');
 
   // Toast notification state
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -513,6 +523,42 @@ export default function GuestList() {
     setMessageError('');
     setMessageSuccess('');
     setShowMessageModal(true);
+  };
+
+  const openWhatsAppMessageModal = (guest: Guest) => {
+    setSelectedGuestForWhatsApp(guest);
+    setShowSenderModal(true);
+  };
+
+  const closeWhatsAppSenderModal = () => {
+    setShowSenderModal(false);
+    if (!showWhatsAppModal) {
+      setSelectedGuestForWhatsApp(null);
+    }
+  };
+
+  const handleWhatsAppSenderSelect = (sender: WhatsAppSender) => {
+    setSelectedWhatsAppSender(sender);
+    setShowSenderModal(false);
+    setShowComposerModal(true);
+  };
+
+  const closeWhatsAppComposerModal = () => {
+    setShowComposerModal(false);
+    setComposedMessage('');
+  };
+
+  const handleWhatsAppCompose = (message: string) => {
+    setComposedMessage(message);
+    setShowComposerModal(false);
+    setShowWhatsAppModal(true);
+  };
+
+  const closeWhatsAppMessageModal = () => {
+    setShowWhatsAppModal(false);
+    setSelectedGuestForWhatsApp(null);
+    setSelectedWhatsAppSender(null);
+    setComposedMessage('');
   };
 
   const handleSendMessage = async () => {
@@ -1002,8 +1048,12 @@ export default function GuestList() {
                             <input
                               type="checkbox"
                               checked={guest.attendanceStatus === 'Yes'}
-                              readOnly
-                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-default pointer-events-none"
+                              onChange={(e) => {
+                                const newStatus = e.target.checked ? 'Yes' : 'Maybe';
+                                updateGuest(guest.id, { attendanceStatus: newStatus });
+                                refreshGuests();
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 cursor-pointer"
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -1080,25 +1130,14 @@ export default function GuestList() {
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => openMessageModal(guest)}
-                                className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-1.5 hover:bg-rose-50 rounded"
-                                title="Send message"
+                                onClick={() => openWhatsAppMessageModal(guest)}
+                                className="inline-flex items-center justify-center text-gray-500 hover:text-green-600 transition-colors p-1.5 hover:bg-green-50 rounded"
+                                title="Send WhatsApp message"
                               >
-                                <MessageCircle className="w-4 h-4" />
+                                <Send className="w-4 h-4" />
                               </button>
-                              {guest.additionalGuests && guest.additionalGuests.length > 0 ? (
-                                <button
-                                  onClick={() => toggleGuestExpanded(guest.id)}
-                                  className="inline-flex items-center justify-center text-gray-500 hover:text-rose-600 transition-colors p-1 hover:bg-gray-100 rounded"
-                                  title="Toggle details"
-                                >
-                                  {isExpanded ? (
-                                    <ChevronDown className="w-4 h-4" />
-                                  ) : (
-                                    <ChevronRight className="w-4 h-4" />
-                                  )}
-                                </button>
-                              ) : null}
+
+
                               <button
                                 type="button"
                                 onClick={() => requestDeleteGuest(guest)}
@@ -1111,42 +1150,61 @@ export default function GuestList() {
                           </td>
                         </tr>
 
-                        {/* Expanded Details */}
-                        {isExpanded && guest.additionalGuests && guest.additionalGuests.length > 0 && (
-                          <tr className="bg-gray-50 border-b border-gray-100">
-                            <td colSpan={13} className="px-6 py-4">
-                              <div className="space-y-3">
-                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                                  <Users className="w-4 h-4" /> Additional Guests ({guest.additionalGuests.length})
-                                </h4>
-                                <div className="space-y-2">
-                                  {guest.additionalGuests.map((addGuest, idx) => (
-                                    <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200 flex items-start justify-between">
-                                      <div>
-                                        <div className="font-medium text-gray-900">
-                                          {addGuest.name}
-                                          <span className="text-sm text-gray-500 font-normal ml-2">
-                                            • {addGuest.relation} • {addGuest.age} years
-                                          </span>
-                                        </div>
-                                        <div className="text-sm text-gray-600 mt-1">
-                                          📧 {addGuest.email} | 📱 {formatMobileForDisplay(addGuest.mobile, addGuest.countryCode || 'IN')}
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => deleteAdditionalGuest(guest.id, idx)}
-                                        className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                                        title="Delete additional guest"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
+                        {/* Additional Guests - Tree Hierarchy */}
+                        {guest.additionalGuests && guest.additionalGuests.length > 0 && (
+                          guest.additionalGuests.map((addGuest, idx) => {
+                            const addFirstName = addGuest.name.split(' ')[0];
+                            const addLastName = addGuest.name.split(' ').slice(1).join(' ');
+                            const addInitials = (addGuest.name.split(' ')[0][0] + (addGuest.name.split(' ')[1]?.[0] || '')).toUpperCase();
+                            const isLast = idx === (guest.additionalGuests?.length ?? 0) - 1;
+
+                            return (
+                              <tr key={`${guest.id}-add-${idx}`} className="border-b border-gray-100 bg-gray-50/50 hover:bg-gray-100/50 transition-colors">
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-300 text-sm font-mono flex-shrink-0" style={{ marginLeft: '4px' }}>
+                                      {isLast ? '└─' : '├─'}
+                                    </span>
+                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-300 to-indigo-400 text-white flex items-center justify-center text-[10px] font-semibold flex-shrink-0">
+                                      {addInitials}
                                     </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
+                                    <span className="text-gray-700 text-sm truncate">{addFirstName}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-gray-600 text-sm truncate">{addLastName || '-'}</td>
+                                <td className="px-4 py-2 text-gray-500 text-sm">{addGuest.mobile ? formatMobileForDisplay(addGuest.mobile, addGuest.countryCode || 'IN') : '-'}</td>
+                                <td className="px-4 py-2 text-gray-500 text-sm truncate">
+                                  {addGuest.email ? (
+                                    <a href={`mailto:${addGuest.email}`} className="hover:text-rose-600 text-blue-500">{addGuest.email}</a>
+                                  ) : '-'}
+                                </td>
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2">
+                                  <span className="text-gray-400 text-xs">{addGuest.relation || '-'}</span>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 whitespace-nowrap">
+                                    Additional
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteAdditionalGuest(guest.id, idx)}
+                                    className="inline-flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors p-1 hover:bg-red-50 rounded"
+                                    title="Remove additional guest"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </Fragment>
                     );
@@ -1581,6 +1639,37 @@ export default function GuestList() {
               }
             }
           }}
+        />
+      )}
+
+      {/* WhatsApp Sender Selection Modal */}
+      {showSenderModal && selectedGuestForWhatsApp && (
+        <SelectSenderModal
+          isOpen={showSenderModal}
+          onClose={closeWhatsAppSenderModal}
+          onSelectSender={handleWhatsAppSenderSelect}
+        />
+      )}
+
+      {/* WhatsApp Composer Modal */}
+      {showComposerModal && selectedGuestForWhatsApp && selectedWhatsAppSender && (
+        <WhatsAppComposerModal
+          guest={selectedGuestForWhatsApp}
+          sender={selectedWhatsAppSender}
+          isOpen={showComposerModal}
+          onClose={closeWhatsAppComposerModal}
+          onCompose={handleWhatsAppCompose}
+        />
+      )}
+
+      {/* WhatsApp Message Modal */}
+      {showWhatsAppModal && selectedGuestForWhatsApp && selectedWhatsAppSender && (
+        <WhatsAppMessageModal
+          guest={selectedGuestForWhatsApp}
+          sender={selectedWhatsAppSender}
+          isOpen={showWhatsAppModal}
+          onClose={closeWhatsAppMessageModal}
+          initialMessage={composedMessage}
         />
       )}
     </div>

@@ -86,7 +86,6 @@ export interface Guest {
   idBackFile?: string;
   
   // Food
-  mealPreference: string;
   dietaryRestrictions: string;
   
   // Special Assistance
@@ -182,7 +181,32 @@ function getItem<T>(key: string, fallback: T): T {
 }
 
 function setItem<T>(key: string, data: T): void {
-  localStorage.setItem(key, JSON.stringify(data));
+  try {
+    const jsonData = JSON.stringify(data);
+    const sizeInMB = (new Blob([jsonData]).size / (1024 * 1024)).toFixed(2);
+    console.log(`Attempting to save ${key}: ${sizeInMB} MB`);
+    localStorage.setItem(key, jsonData);
+    console.log(`Successfully saved ${key}`);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      console.error('LocalStorage quota exceeded!', error);
+      // Calculate current storage usage
+      let totalSize = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          totalSize += localStorage.getItem(key)?.length || 0;
+        }
+      }
+      const totalMB = (totalSize / (1024 * 1024)).toFixed(2);
+      throw new Error(
+        `Storage limit exceeded! Current usage: ${totalMB} MB. ` +
+        `Please reduce the number or size of uploaded documents. ` +
+        `Tip: Try uploading smaller images or fewer documents at once.`
+      );
+    }
+    throw error;
+  }
 }
 
 // User functions
@@ -270,6 +294,13 @@ export function addGuest(guest: Omit<Guest, 'id' | 'submittedAt'>): Guest {
     id: uuidv4(),
     submittedAt: new Date().toISOString(),
   };
+  
+  // Log document info before saving
+  if (newGuest.documents && newGuest.documents.length > 0) {
+    const totalDocSize = newGuest.documents.reduce((sum, doc) => sum + doc.fileSize, 0);
+    console.log(`Adding guest with ${newGuest.documents.length} documents, total size: ${(totalDocSize / (1024 * 1024)).toFixed(2)} MB`);
+  }
+  
   guests.push(newGuest);
   setItem('wedding_guests', guests);
   return newGuest;
@@ -281,6 +312,13 @@ export function updateGuest(id: string, updates: Partial<Guest>): Guest | null {
   if (index === -1) return null;
 
   guests[index] = { ...guests[index], ...updates };
+  
+  // Log document info if updating documents
+  if (updates.documents) {
+    const totalDocSize = updates.documents.reduce((sum, doc) => sum + doc.fileSize, 0);
+    console.log(`Updating guest with ${updates.documents.length} documents, total size: ${(totalDocSize / (1024 * 1024)).toFixed(2)} MB`);
+  }
+  
   setItem('wedding_guests', guests);
   return guests[index];
 }
@@ -400,7 +438,6 @@ export function convertParsedGuestToGuest(
       needsDrop: false,
       transferPassengers: 0,
       transferBags: 0,
-      mealPreference: '',
       dietaryRestrictions: '',
       specialAssistance: [],
       celebrationParticipation: [],

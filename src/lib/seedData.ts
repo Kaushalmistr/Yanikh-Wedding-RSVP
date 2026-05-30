@@ -164,7 +164,6 @@ export function seedDummyData() {
 
   const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Jaipur', 'Ahmedabad', 'Chandigarh'];
   const attendanceStatuses: Array<'Yes' | 'Maybe' | 'Cannot attend'> = ['Yes', 'Yes', 'Yes', 'Yes', 'Maybe', 'Maybe', 'Cannot attend'];
-  const mealPreferences = ['Vegetarian', 'Non-Vegetarian', 'Jain', 'Vegan'];
   const travelModes = ['Flight', 'Train', 'Car', 'Bus'];
 
   events.forEach((event, eventIndex) => {
@@ -216,7 +215,6 @@ export function seedDummyData() {
         needsDrop: needsTravel && Math.random() > 0.5,
         transferPassengers: needsTravel ? 1 + Math.floor(Math.random() * 3) : 0,
         transferBags: needsTravel ? 1 + Math.floor(Math.random() * 4) : 0,
-        mealPreference: mealPreferences[Math.floor(Math.random() * mealPreferences.length)],
         dietaryRestrictions: Math.random() > 0.7 ? 'No Onion, No Garlic' : '',
         specialAssistance: Math.random() > 0.8 ? ['Wheelchair Access'] : [],
         celebrationParticipation: attendanceStatus === 'Yes' && Math.random() > 0.6 ? ['Dance Performance', 'Speech'] : [],

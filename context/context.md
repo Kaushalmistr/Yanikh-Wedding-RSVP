@@ -3,9 +3,23 @@
 ## Project Overview
 
 **Project Name:** Yanikh Wedding RSVP  
-**Purpose:** A comprehensive wedding event management and RSVP tracking system that allows couples to create wedding events, collect RSVPs, manage guest information, and track attendance details.
+**Purpose:** A comprehensive wedding event management and RSVP tracking system that allows couples to create wedding events, collect RSVPs, manage guest information, track attendance details, send bulk WhatsApp messages, and manage document uploads from guests.
 
 **Live Demo:** https://withJoy.com/nanki-and-yuvraj-khanna/edit/cards/wedding/save-the-date
+
+---
+
+## Key Features
+
+✅ **Event Management** - Create and manage multiple wedding events  
+✅ **Guest RSVP Tracking** - Multi-step RSVP form with comprehensive guest details  
+✅ **Document Management** - Upload, download, and manage guest documents (ID proofs, tickets, etc.)  
+✅ **WhatsApp Integration** - Send bulk WhatsApp messages via WhatsApp Business Cloud API  
+✅ **Guest List Management** - View, filter, and export guest information  
+✅ **Bulk Messaging** - Send auto-generated or custom messages to multiple guests  
+✅ **Excel Export** - Export guest data to Excel format  
+✅ **Authentication** - Secure login system for event organizers  
+✅ **Country Code Support** - International phone number support with country flags  
 
 ---
 
@@ -24,9 +38,16 @@
 - **Class Utilities:** clsx + tailwind-merge
 
 ### Backend/Storage
-- **Database:** localStorage (Client-side)
-- **Authentication:** Custom localStorage-based auth
-- **Data Persistence:** JSON serialization in localStorage
+- **Database:** localStorage (Client-side) + Supabase (Backend)
+- **Authentication:** Custom localStorage-based auth with Supabase integration
+- **Data Persistence:** JSON serialization in localStorage and Supabase
+- **WhatsApp API:** Meta WhatsApp Business Cloud API v21.0
+- **Secure Proxy:** Supabase Edge Functions for API token management
+
+### External Services
+- **Supabase** - Backend-as-a-Service with Edge Functions
+- **WhatsApp Business API** - For sending bulk messages via Meta Graph API
+- **Meta Business Platform** - WhatsApp integration provider
 
 ### Development
 - **Package Manager:** npm
@@ -51,7 +72,7 @@ Yanikh-Wedding-RSVP/
 │   │   ├── CountryFlag.tsx         # Country flag display component
 │   │   └── DocumentsModal.tsx      # Document upload/preview/download modal
 │   ├── context/
-│   │   └── AuthContext.tsx      # Authentication state management
+│   │   └── AuthContext.tsx                  # Authentication state management
 │   ├── lib/
 │   │   ├── constants.ts         # App-wide constants, country codes, validation
 │   │   ├── db.ts                # Database layer (localStorage CRUD)
@@ -115,6 +136,22 @@ interface WeddingEvent {
   coverImage: string;      // base64 or URL
   createdBy: string;       // user id
   createdAt: string;
+}
+```
+
+### Guest Document
+```typescript
+interface GuestDocument {
+  id: string;
+  fileName: string;          // Original file name
+  fileType: string;          // MIME type (e.g., 'image/jpeg', 'application/pdf')
+  fileSize: number;          // File size in bytes
+  base64Data: string;        // Base64-encoded file content
+  uploadedAt: string;        // ISO timestamp
+  uploadedBy: 'guest' | 'admin';
+  guestId: string;           // Guest who uploaded the document
+  relatedGuestId?: string;   // Reference to related guest (optional)
+  description?: string;      // Document type (e.g., 'Flight Ticket', 'Aadhaar Card - Front')
 }
 ```
 
@@ -195,6 +232,9 @@ interface Guest {
   idNumber?: string;         // Format validated based on idType
   idFrontFile?: string;      // base64 encoded file data
   idBackFile?: string;       // base64 encoded file data
+  
+  // Documents Uploaded with RSVP
+  documents?: GuestDocument[]; // All uploaded documents (ID, tickets, etc.)
   
   // Food & Preferences
   mealPreference: string;
@@ -864,6 +904,19 @@ AuthContext
   - Finally tries partial name match
   - Returns matching guest or undefined
 
+### Document Management Operations (documentService.ts)
+- `createGuestDocument(file, guestId, uploadedBy, relatedGuestId?, description?)` - Convert File to GuestDocument
+- `fileToBase64(file)` - Convert File object to base64 string
+- `base64ToBlob(base64, contentType)` - Convert base64 to Blob for download
+- `validateDocumentFile(file)` - Validate file type and size
+- `downloadDocument(document)` - Download single document as file
+- `downloadMultipleDocuments(documents)` - Download multiple documents
+- `downloadDocumentsAsZip(documents, guestName)` - Download multiple with naming pattern
+- `getFileIcon(fileType)` - Get emoji icon for file type (🖼️ for images, 📄 for PDF)
+- `formatFileSize(bytes)` - Format file size for display
+- `getPreviewUrl(document)` - Get preview URL for image documents
+- `uploadGuestDocument(file, eventId, guestId, fileName)` - Upload to Supabase storage
+
 ### Guest List File Parsing
 - `parseGuestListFile(file)` - Parse Excel/CSV file and extract guest data with flexible column matching
 - `normalizeEventName(name)` - Convert event aliases to standard names
@@ -1076,6 +1129,448 @@ Supported file formats for detection:
 
 ---
 
+## WhatsApp Integration
+
+### Overview
+The system integrates with **WhatsApp Business Cloud API** to send bulk messages directly to guests without manual intervention. The implementation uses a secure proxy architecture with Supabase Edge Functions to protect API credentials.
+
+### Architecture
+```
+┌─────────────┐       ┌──────────────────────────┐       ┌─────────────────────┐
+│  React App  │──POST──▶  Supabase Edge Function  │──POST──▶  Meta Graph API    │
+│  (Browser)  │       │  /send-whatsapp          │       │  WhatsApp Cloud API │
+│             │◀─JSON──│  (holds access token)    │◀─JSON──│  v21.0/messages    │
+└─────────────┘       └──────────────────────────┘       └─────────────────────┘
+```
+
+**Security Benefits:**
+- API tokens **never** reach browser
+- Supabase Edge Function acts as secure proxy
+- Tokens stored as Supabase secrets only
+- All sensitive operations happen server-side
+
+### Supported Message Types
+1. **Automatic Messages** - Via WhatsApp Business API without manual send
+2. **Fallback to wa.me** - If API not configured, falls back to WhatsApp Web links
+3. **Template Messages** - Pre-approved by Meta (required for first contact)
+4. **Free-form Text** - For conversations in 24-hour reply window
+
+### Configuration Requirements
+
+**Prerequisites:**
+- Meta Business account: [business.facebook.com](https://business.facebook.com/)
+- Meta Developer account: [developers.facebook.com](https://developers.facebook.com/)
+- Supabase project with Edge Functions enabled
+- WhatsApp Business Account with verified phone number
+
+**Credentials Needed:**
+- **Phone Number ID**: ID of WhatsApp phone number in Meta dashboard
+- **Business Account ID**: Meta Business Account ID
+- **Access Token**: Long-lived access token from Meta App Settings
+- **Webhook Verify Token**: Custom token for webhook security (optional)
+
+**Supabase Setup:**
+- Deploy `supabase/functions/send-whatsapp/index.ts` as Edge Function
+- Set secrets in Supabase:
+  - `WHATSAPP_PHONE_NUMBER_ID`
+  - `WHATSAPP_ACCESS_TOKEN`
+  - `WHATSAPP_BUSINESS_ACCOUNT_ID`
+
+### WhatsApp Service Functions
+
+#### `whatsappService.ts`
+Main service for WhatsApp integration:
+
+```typescript
+// Send message via API or fallback to wa.me link
+sendWhatsAppMessage(
+  phoneNumber: string,
+  message: string,
+  countryCode?: string,
+  fallbackUrl?: string
+): Promise<SendResult>
+
+// Get formatted phone number with country code
+formatPhoneNumber(mobile: string, countryCode: string): string
+
+// Check if WhatsApp is configured
+isWhatsAppConfigured(): boolean
+```
+
+#### `whatsappUtils.ts`
+Utility functions for WhatsApp integration:
+
+```typescript
+// Generate wa.me link (WhatsApp Web fallback)
+generateWaLink(phoneNumber: string): string
+
+// Format phone number for wa.me link
+formatPhoneNumberForWaLink(mobile: string, countryCode: string): string
+
+// Validate phone number format
+isValidPhoneNumber(mobile: string): boolean
+```
+
+#### Supabase Edge Function: `send-whatsapp/index.ts`
+Secure proxy for WhatsApp API calls:
+
+```typescript
+// Request payload structure
+{
+  phoneNumber: string;        // Full phone number with country code
+  message: string;            // Message content
+  countryCode?: string;       // Optional: country code for formatting
+}
+
+// Response structure
+{
+  success: boolean;
+  messageId?: string;         // Message ID from WhatsApp API
+  status?: string;            // Message status (sent, failed, etc.)
+  error?: string;             // Error message if failed
+  fallbackUrl?: string;       // wa.me link as fallback
+}
+```
+
+### Message Status Tracking
+
+Messages are tracked with the following states:
+- **Success**: Message sent via WhatsApp API successfully
+- **Pending**: Message queued for sending
+- **Failed**: API request failed, fallback to wa.me link
+- **Not Sent**: Message in draft or not sent yet
+
+### Guest Targeting Capabilities
+
+Guests can be targeted based on:
+- **Specific Functions**: Select which wedding events/functions to target
+  - Welcome Lunch
+  - Mehendi
+  - Sangeet
+  - Haldi
+  - Wedding Ceremony
+  - Reception
+  - Farewell Brunch
+- **Attendance Status**: Yes, Maybe, Cannot Attend
+- **Custom Filters**: By city, meal preference, special assistance needs, etc.
+
+### Message Composition Features
+
+**Compose Tab Features:**
+- Title field for message organization
+- Rich message content with formatting support
+- Function/event selection with checkboxes
+- Real-time recipient count calculation
+- Message preview panel
+- Save as draft option
+- Send immediately option
+
+**Auto-Send Features:**
+- Upload guest list (Excel/CSV format)
+- Auto-detect which events each guest is attending
+- Intelligent event name matching
+- Automatic guest matching by name/email
+- Personalized message generation
+- Batch sending with progress tracking
+- Upload history with statistics
+
+### Error Handling & Fallback
+
+If WhatsApp API call fails:
+1. Logs error to console
+2. Returns wa.me link as fallback
+3. User can manually send via WhatsApp Web
+4. Message status shows "Failed" but user gets alternative option
+5. Graceful UI feedback with error message
+
+### Limits & Considerations
+
+**API Rate Limits:**
+- Meta imposes limits on message throughput
+- Implement throttling for bulk sends
+- Recommended: 80 messages/second for verified numbers
+- Upgrade account for higher limits
+
+**Message Quality:**
+- First message to customer must be template
+- Template must be pre-approved by Meta
+- Free-form text only allowed within 24-hour window
+- Messages to similar numbers may be blocked (spam detection)
+
+**Cost Considerations:**
+- WhatsApp Business API is a paid service
+- Charges based on message volume and type
+- Template messages: free tier available
+- Utility messages: charged per message
+
+---
+
+## Document Management System
+
+### Overview
+Complete document lifecycle management for guest RSVP submissions. Documents are uploaded with RSVP forms and immediately synchronized to guest list views for easy retrieval and download.
+
+### Supported Document Types
+
+**ID Documents:**
+- Aadhaar Card (front & back)
+- Passport (front & back)
+- Driving License (front & back)
+- Voter ID (front & back)
+
+**Travel Documents:**
+- Flight Tickets
+- Train Tickets
+- Travel Insurance
+- Visa Documents
+
+**General Documents:**
+- Emergency Contact Proof
+- Health Declarations
+- Special Accommodation Requests
+- Other supporting documents
+
+### File Specifications
+
+**Allowed File Types:**
+- Images: JPG, PNG, WEBP, GIF, BMP
+- Documents: PDF
+- Total: 6 supported formats
+
+**Size Limits:**
+- Individual file: Maximum 10MB
+- Multiple files per guest: No limit on count
+- Storage: Base64-encoded in localStorage/Supabase
+
+**File Validation:**
+- ✅ Client-side type & size validation
+- ✅ MIME type verification
+- ✅ Extension checking
+- ⚠️ Server-side validation recommended for production
+
+### Document Management Operations (documentService.ts)
+
+**Core Functions:**
+
+```typescript
+// Convert file to GuestDocument object
+createGuestDocument(
+  file: File,
+  guestId: string,
+  uploadedBy: 'guest' | 'admin',
+  relatedGuestId?: string,
+  description?: string
+): Promise<GuestDocument>
+
+// Validate file before upload
+validateDocumentFile(file: File): {
+  valid: boolean;
+  error?: string;
+}
+
+// Download single document
+downloadDocument(document: GuestDocument): void
+
+// Download multiple documents
+downloadMultipleDocuments(documents: GuestDocument[]): void
+
+// Download as ZIP file
+downloadDocumentsAsZip(documents: GuestDocument[], guestName: string): void
+
+// Get preview URL for documents
+getPreviewUrl(document: GuestDocument): string
+
+// Get file type icon
+getFileIcon(fileType: string): string
+
+// Format file size for display
+formatFileSize(bytes: number): string
+
+// Upload to cloud storage
+uploadGuestDocument(
+  file: File,
+  eventId: string,
+  guestId: string,
+  fileName: string
+): Promise<UploadResult>
+```
+
+### Document Display & Management
+
+**In Guest List Table:**
+- Documents Column shows:
+  - Count of documents uploaded
+  - Link to open Documents Modal
+  - "—" if no documents uploaded
+
+**DocumentsModal Component:**
+- Full-screen document viewer
+- Grid view (default) and list view
+- Document thumbnails with file icons
+- File size and upload date display
+- Download individual or multiple documents
+- Delete document functionality
+- Upload additional documents
+- Search/filter documents by name
+
+**Features:**
+- 🖼️ Image preview for uploaded documents
+- 📄 PDF preview support
+- ✅ File type indicators with emojis
+- 📥 Bulk download with ZIP
+- 🗑️ Individual and bulk delete
+- 📤 Additional uploads without re-doing RSVP
+- 📊 Document statistics (count, total size)
+
+### Document Lifecycle
+
+1. **Upload During RSVP:**
+   - Documents uploaded as part of Step 4 final confirmation
+   - Converted to base64 and stored in GuestDocument array
+   - Automatically saved with guest RSVP
+
+2. **Immediate Sync:**
+   - Documents appear in guest list immediately after RSVP submission
+   - No refresh required
+   - Guest List shows "Documents (X)" link
+
+3. **Access & Download:**
+   - Click "Documents (X)" link in guest list
+   - DocumentsModal opens with all guest documents
+   - View, download, or delete documents
+   - Download options:
+     - Individual document download
+     - Multiple selected documents download
+     - All documents as ZIP file
+
+4. **Deletion:**
+   - Individual document deletion with confirmation
+   - Bulk deletion with checkboxes
+   - Deleted documents removed from guest record
+
+### Storage Architecture
+
+**Client-side (localStorage):**
+- Documents stored as base64 in GuestDocument objects
+- Persisted with guest RSVP record
+- Automatic sync to all tabs
+- Max ~5-10MB due to localStorage limits
+
+**Cloud Storage (Supabase - Optional):**
+- Alternative for large file volumes
+- Separate bucket for guest documents
+- Metadata stored in database
+- Files streamed from CDN
+
+### File Size Calculation
+
+Total storage per document:
+```
+File Size = (Actual File Bytes × 1.33) + Metadata Overhead
+```
+Example:
+- 2MB image → ~2.66MB in localStorage
+- 10 documents × 1MB average → ~13.3MB total
+
+### Security & Privacy
+
+**Current Implementation:**
+- ✅ Client-side file type validation
+- ✅ File size limits enforced
+- ✅ Base64 encoding for safe storage
+- ⚠️ Stored in localStorage (browser accessible)
+
+**Recommendations for Production:**
+- Server-side file validation
+- Virus/malware scanning (ClamAV or similar)
+- Encrypt documents at rest
+- HTTPS only transmission
+- Access controls (guest can only upload their own documents)
+- Audit logging for downloads
+- GDPR compliance data retention
+
+### Performance Considerations
+
+**Optimization Strategies:**
+- Lazy load document previews
+- Pagination for large document collections
+- Compression before storage
+- CDN delivery for cloud-stored files
+- Cache-busting for document updates
+
+**Large File Handling:**
+- Warn users for files >5MB
+- Show upload progress indicator
+- Stream large downloads
+- Implement resumable uploads for cloud storage
+
+---
+
+## Environment Variables & Configuration
+
+### `.env` File Structure
+```env
+# Supabase Configuration
+VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# WhatsApp Configuration (Optional)
+VITE_WHATSAPP_PHONE_NUMBER_ID=101234567890123
+VITE_WHATSAPP_API_ENABLED=true
+VITE_WHATSAPP_FALLBACK_ENABLED=true
+
+# Feature Flags
+VITE_ENABLE_DOCUMENT_MANAGEMENT=true
+VITE_ENABLE_BULK_MESSAGING=true
+VITE_ENABLE_WHATSAPP_INTEGRATION=true
+```
+
+### Supabase Secrets (for Edge Functions)
+```
+WHATSAPP_PHONE_NUMBER_ID=101234567890123
+WHATSAPP_ACCESS_TOKEN=EABxxxxxxxxxx...
+WHATSAPP_BUSINESS_ACCOUNT_ID=123456789...
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=custom-token-123
+```
+
+---
+
+## Recent Changes & Updates
+
+### Latest Features (May 2026)
+- ✅ WhatsApp Business API integration with secure proxy
+- ✅ Document management system with base64 storage
+- ✅ Auto-detect guest lists with event attendance parsing
+- ✅ Bulk messaging with function-based targeting
+- ✅ DocumentsModal for document viewing/management
+- ✅ Country-specific phone validation (14 countries)
+- ✅ Government ID format validation
+- ✅ Flight/Train PNR validation
+- ✅ File upload with type/size validation
+- ✅ Supabase Edge Functions for secure API proxy
+- ✅ Guest list auto-send messaging
+- ✅ Upload history tracking
+
+### Known Issues & TODOs
+- [ ] Implement rate limiting for bulk sends
+- [ ] Add virus scanning for uploaded documents
+- [ ] Server-side file validation
+- [ ] Document encryption at rest
+- [ ] Email integration for RSVP confirmations
+- [ ] SMS notifications for guests
+- [ ] Real-time RSVP updates
+- [ ] Advanced analytics dashboard
+- [ ] Payment/gift registry integration
+
+---
+
+## Version History
+
+- **v1.0.0** (May 2026) - Initial release with core RSVP, guest management, bulk messaging, and WhatsApp integration
+- **Features:** Event management, multi-step RSVP form, guest list tracking, document uploads, bulk messaging, WhatsApp API integration
+
+---
+
 ## Auto-Detection & Auto-Send Feature
 
 ### How Auto-Detection Works
@@ -1218,6 +1713,8 @@ npm run preview
 | `GuestList.tsx` | Full CRUD guest list with column filters, documents, WhatsApp status |
 | `RSVPForm.tsx` | Multi-step RSVP collection form with document upload |
 | `BulkMessaging.tsx` | Bulk messaging and auto-send features |
+| `DocumentsModal.tsx` | Modal for viewing/managing guest documents |
+| `WhatsAppMessageModal.tsx` | Modal interface to type and send WhatsApp messages |
 
 ---
 
