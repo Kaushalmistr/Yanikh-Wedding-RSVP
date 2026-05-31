@@ -1,19 +1,20 @@
 import { useState, useMemo } from 'react';
 import { Send, X, MessageCircle } from 'lucide-react';
 import { formatMobileForDisplay } from '../lib/constants';
-import type { Guest } from '../lib/db';
+import type { Guest, WeddingEvent } from '../lib/db';
 import type { WhatsAppSender } from './SelectSenderModal';
 
 // Message templates for different wedding functions
 const MESSAGE_TEMPLATES = {
   greetings: 'Dear {guestName},\n\nWe are delighted to invite you to our wedding celebration! Your presence is essential to make this special day even more memorable.',
-  rsvpLink: 'Please confirm your attendance by clicking on the link below:\n\nhttps://yourweddingsite.com/rsvp/{guestId}',
+  rsvpLink: 'Please confirm your attendance by clicking on the link below:\n\n{rsvpLink}',
   arrival: 'Welcome! Please provide your arrival details including date, time, and preferred pickup location. Click here to update: https://yourweddingsite.com/arrival',
   departure: 'Thank you for celebrating with us! Please share your departure details so we can assist with drop-off arrangements. Update here: https://yourweddingsite.com/departure',
 };
 
 interface WhatsAppComposerModalProps {
   guest: Guest;
+  event: WeddingEvent;
   sender: WhatsAppSender;
   isOpen: boolean;
   onClose: () => void;
@@ -31,6 +32,7 @@ const CHIPS: { type: ChipType; label: string; icon: string }[] = [
 
 export default function WhatsAppComposerModal({
   guest,
+  event,
   sender,
   isOpen,
   onClose,
@@ -40,6 +42,12 @@ export default function WhatsAppComposerModal({
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
 
   if (!isOpen) return null;
+
+  const generateRsvpUrl = (): string => {
+    // For HashRouter, build URL with hash-based routing
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return `${baseUrl}#/rsvp/guest/${event.rsvpToken}`;
+  };
 
   const handleTemplateChange = (template: string) => {
     setSelectedTemplate(template);
@@ -75,8 +83,8 @@ export default function WhatsAppComposerModal({
   const previewMessage = useMemo(() => {
     return messageText
       .replace('{guestName}', guest.name)
-      .replace('{guestId}', guest.id);
-  }, [messageText, guest]);
+      .replace('{rsvpLink}', generateRsvpUrl());
+  }, [messageText, guest, event]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">

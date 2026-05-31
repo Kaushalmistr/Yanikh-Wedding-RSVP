@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getGuestsByEvent, type WeddingEvent, type Guest } from '../lib/db';
-import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase } from 'lucide-react';
+import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase, Copy, Check } from 'lucide-react';
 import { DEFAULT_COVER_IMAGE, formatMobileForDisplay } from '../lib/constants';
 
 export default function EventDetail() {
@@ -12,6 +12,7 @@ export default function EventDetail() {
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
   const [showGuestListTable, setShowGuestListTable] = useState(false);
   const [expandedGuests, setExpandedGuests] = useState<string[]>([]);
+  const [copiedRsvpLink, setCopiedRsvpLink] = useState(false);
 
   const toggleGuestExpanded = (guestId: string) => {
     setExpandedGuests(prev => 
@@ -19,6 +20,22 @@ export default function EventDetail() {
         ? prev.filter(id => id !== guestId)
         : [...prev, guestId]
     );
+  };
+
+  const generateRsvpUrl = (event: WeddingEvent): string => {
+    // For HashRouter, build URL with hash-based routing
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return `${baseUrl}#/rsvp/guest/${event.rsvpToken}`;
+  };
+
+  const copyRsvpLink = () => {
+    if (event) {
+      const rsvpUrl = generateRsvpUrl(event);
+      navigator.clipboard.writeText(rsvpUrl).then(() => {
+        setCopiedRsvpLink(true);
+        setTimeout(() => setCopiedRsvpLink(false), 2000);
+      });
+    }
   };
 
   useEffect(() => {
@@ -98,6 +115,41 @@ export default function EventDetail() {
               <div className="relative w-full h-60 rounded-3xl overflow-hidden shadow-2xl">
                 <img src={event.coverImage || DEFAULT_COVER_IMAGE} alt="Wedding" className="w-full h-full object-cover" />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RSVP Link Section */}
+        <div className="w-full px-12 py-8 bg-gradient-to-r from-rose-50 to-pink-50 border-b border-rose-100">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between bg-white rounded-2xl p-6 shadow-sm border border-rose-100">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Guest RSVP Link</h3>
+                <p className="text-sm text-gray-600 mb-3">Share this link with guests to collect RSVP responses</p>
+                <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-3 font-mono text-sm text-gray-700 break-all">
+                  {generateRsvpUrl(event)}
+                </div>
+              </div>
+              <button
+                onClick={copyRsvpLink}
+                className={`ml-4 flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  copiedRsvpLink
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-rose-600 text-white hover:bg-rose-700'
+                }`}
+              >
+                {copiedRsvpLink ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { User, WeddingEvent, Guest, BulkMessage, UploadedGuestList } from './db';
 
+// Helper function to generate RSVP token
+function generateRsvpToken(): string {
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15);
+}
+
 // Clear all existing data and populate with dummy data
 export function seedDummyData() {
   // Generate dummy users
@@ -67,6 +73,7 @@ export function seedDummyData() {
   const events: WeddingEvent[] = [
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Yuvraj Khanna',
       brideName: 'Nanki Sharma',
       coupleStory: 'We met during a college fest in 2020 and instantly connected over our love for music and travel. After 6 years of friendship and love, we are ready to start our forever journey together.',
@@ -79,6 +86,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Rohan Gupta',
       brideName: 'Meera Joshi',
       coupleStory: 'Childhood friends turned soulmates! We grew up in the same neighborhood and destiny brought us back together after 15 years.',
@@ -91,6 +99,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Aditya Sharma',
       brideName: 'Isha Patel',
       coupleStory: 'From colleagues to life partners! Working late nights on projects turned into late night conversations, and here we are today.',
@@ -103,6 +112,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Kabir Mehta',
       brideName: 'Sanya Kapoor',
       coupleStory: 'A match made through family, blessed by destiny. What started as an arranged meeting blossomed into beautiful love.',
@@ -115,6 +125,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Arnav Malhotra',
       brideName: 'Kavya Reddy',
       coupleStory: 'Met at a destination wedding as strangers, became best friends, and now planning our own destination wedding!',
@@ -127,6 +138,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Varun Bajaj',
       brideName: 'Riya Singh',
       coupleStory: 'High school sweethearts who believed in forever. After 8 years together, we are finally saying "I do".',
@@ -139,6 +151,7 @@ export function seedDummyData() {
     },
     {
       id: uuidv4(),
+      rsvpToken: generateRsvpToken(),
       groomName: 'Dev Khanna',
       brideName: 'Tara Bose',
       coupleStory: 'From dating app to altar! Swiped right and found my forever. Sometimes technology does bring soulmates together.',

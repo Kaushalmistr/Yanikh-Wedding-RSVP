@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getEventById, addGuest, type WeddingEvent } from '../lib/db';
+import { getEventById, getEventByRSVPToken, addGuest, type WeddingEvent } from '../lib/db';
 import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 import CountryCodeSelect from '../components/CountryCodeSelect';
@@ -43,7 +43,7 @@ function hasMainTrainTravelReady(fd: {
 }
 
 export default function RSVPForm() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<WeddingEvent | null>(null);
   const [step, setStep] = useState(1);
@@ -128,11 +128,21 @@ export default function RSVPForm() {
   });
 
   useEffect(() => {
-    if (id) {
-      const ev = getEventById(id);
+    // Handle both authenticated (/rsvp/:id) and guest (/rsvp/guest/:token) access
+    const eventId = params.id;
+    const token = params.token;
+
+    if (eventId) {
+      // Admin authenticated access via event ID
+      const ev = getEventById(eventId);
       if (ev) setEvent(ev);
+    } else if (token) {
+      // Guest public access via RSVP token
+      const ev = getEventByRSVPToken(token);
+      if (ev) setEvent(ev);
+      else setError('Invalid RSVP link. Please check the link and try again.');
     }
-  }, [id]);
+  }, [params.id, params.token]);
 
   // Truncate mobile number when country code changes
   useEffect(() => {
@@ -364,7 +374,7 @@ export default function RSVPForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateStep() || !id) return;
+    if (!validateStep() || !event) return;
 
     const additionalAdults = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Adult').length;
     const additionalChildren = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Child').length;
@@ -520,7 +530,7 @@ export default function RSVPForm() {
 
     try {
       const guestData = {
-        eventId: id,
+        eventId: event.id,
         name: formData.name,
         mobile: formData.mobile,
         email: formData.email,
@@ -727,9 +737,16 @@ export default function RSVPForm() {
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50">
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-4xl mx-auto px-6 py-5 flex justify-between items-center">
-          <Link to={`/event/${id}`} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
-            <ArrowLeft className="w-5 h-5" /> Back to Event
-          </Link>
+          {event && (
+            <Link to={`/event/${event.id}`} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
+              <ArrowLeft className="w-5 h-5" /> Back to Event
+            </Link>
+          )}
+          {!event && (
+            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
+              <ArrowLeft className="w-5 h-5" /> Go Home
+            </button>
+          )}
           <div className="font-bold text-xl flex items-center gap-2">
             <Heart className="text-rose-500" fill="currentColor" /> Wedding RSVP
           </div>
@@ -737,31 +754,52 @@ export default function RSVPForm() {
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-10">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-gray-900">{event?.groomName} & {event?.brideName}</h1>
-          <p className="text-rose-600 mt-2">Please fill this detailed RSVP form</p>
-        </div>
-
-        <div className="flex justify-between mb-10 border-b pb-6">
-          {sections.map(s => (
-            <div key={s.num} onClick={() => setStep(s.num)}
-              className={`cursor-pointer flex flex-col items-center ${step === s.num ? 'text-rose-600' : 'text-gray-400'}`}>
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border-2 mb-1 ${step === s.num ? 'border-rose-600 bg-rose-50 font-bold' : 'border-gray-200'}`}>
-                {s.num}
-              </div>
-              <div className="text-[10px] font-medium tracking-widest uppercase text-center">{s.title}</div>
-            </div>
-          ))}
-        </div>
+        {!event && !error && (
+          <div className="text-center py-10">
+            <p className="text-gray-600">Loading RSVP form...</p>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border-2 border-red-300 text-red-700 rounded-2xl">
             <div className="font-semibold mb-2">⚠️ Error</div>
             <div className="whitespace-pre-line text-sm">{error}</div>
+            <button 
+              onClick={() => navigate('/')} 
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              Go Home
+            </button>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl p-10">
+        {event && (
+          <>
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-bold text-gray-900">{event.groomName} & {event.brideName}</h1>
+              <p className="text-rose-600 mt-2">Please fill this detailed RSVP form</p>
+            </div>
+
+            <div className="flex justify-between mb-10 border-b pb-6">
+              {sections.map(s => (
+                <div key={s.num} onClick={() => setStep(s.num)}
+                  className={`cursor-pointer flex flex-col items-center ${step === s.num ? 'text-rose-600' : 'text-gray-400'}`}>
+                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border-2 mb-1 ${step === s.num ? 'border-rose-600 bg-rose-50 font-bold' : 'border-gray-200'}`}>
+                    {s.num}
+                  </div>
+                  <div className="text-[10px] font-medium tracking-widest uppercase text-center">{s.title}</div>
+                </div>
+              ))}
+            </div>
+
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border-2 border-red-300 text-red-700 rounded-2xl">
+                <div className="font-semibold mb-2">⚠️ Error</div>
+                <div className="whitespace-pre-line text-sm">{error}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl p-10">
 
           {/* STEP 1: Personal + ID Proof */}
           {step === 1 && (
@@ -2094,7 +2132,9 @@ export default function RSVPForm() {
               <button type="submit" className="ml-auto px-12 py-4 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-bold text-lg rounded-2xl">Submit My RSVP 💖</button>
             )}
           </div>
-        </form>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );

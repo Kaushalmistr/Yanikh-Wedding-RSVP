@@ -1652,9 +1652,10 @@ export default function GuestList() {
       )}
 
       {/* WhatsApp Composer Modal */}
-      {showComposerModal && selectedGuestForWhatsApp && selectedWhatsAppSender && (
+      {showComposerModal && selectedGuestForWhatsApp && selectedWhatsAppSender && event && (
         <WhatsAppComposerModal
           guest={selectedGuestForWhatsApp}
+          event={event}
           sender={selectedWhatsAppSender}
           isOpen={showComposerModal}
           onClose={closeWhatsAppComposerModal}

@@ -31,6 +31,21 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+      {/* Guest RSVP route - must come BEFORE /rsvp/:id to match correctly */}
+      <Route
+        path="/rsvp/guest/:token"
+        element={
+          <RSVPForm />
+        }
+      />
+      <Route
+        path="/rsvp/:id"
+        element={
+          <ProtectedRoute>
+            <RSVPForm />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard"
         element={
@@ -68,14 +83,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <BulkMessaging />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/rsvp/:id"
-        element={
-          <ProtectedRoute>
-            <RSVPForm />
           </ProtectedRoute>
         }
       />

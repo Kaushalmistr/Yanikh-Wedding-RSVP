@@ -127,6 +127,7 @@ export interface GuestDocument {
 
 export interface WeddingEvent {
   id: string;
+  rsvpToken: string; // Unique token for guest RSVP link
   groomName: string;
   brideName: string;
   coupleStory: string;
@@ -239,16 +240,43 @@ export function generateOTP(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// Event functions
-export function getEvents(): WeddingEvent[] {
-  return getItem<WeddingEvent[]>('wedding_events', []);
+export function generateRSVPToken(): string {
+  // Generate a URL-safe token (16 characters)
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15);
 }
 
-export function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt'>): WeddingEvent {
+// Event functions
+export function getEvents(): WeddingEvent[] {
+  const events = getItem<WeddingEvent[]>('wedding_events', []);
+  
+  // Migration: Add rsvpToken to events that don't have one
+  let hasUpdates = false;
+  const migratedEvents = events.map(event => {
+    if (!event.rsvpToken) {
+      hasUpdates = true;
+      return {
+        ...event,
+        rsvpToken: generateRSVPToken(),
+      };
+    }
+    return event;
+  });
+  
+  // Save migrated events if updates were made
+  if (hasUpdates) {
+    setItem('wedding_events', migratedEvents);
+  }
+  
+  return migratedEvents;
+}
+
+export function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' | 'rsvpToken'>): WeddingEvent {
   const events = getEvents();
   const newEvent: WeddingEvent = {
     ...event,
     id: uuidv4(),
+    rsvpToken: generateRSVPToken(),
     createdAt: new Date().toISOString(),
   };
   events.push(newEvent);
@@ -258,6 +286,10 @@ export function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt'>): Wedd
 
 export function getEventById(id: string): WeddingEvent | undefined {
   return getEvents().find(e => e.id === id);
+}
+
+export function getEventByRSVPToken(token: string): WeddingEvent | undefined {
+  return getEvents().find(e => e.rsvpToken === token);
 }
 
 export function searchEvents(query: string): WeddingEvent[] {
