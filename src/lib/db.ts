@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from './supabase';
 
 // Types
 export interface User {
@@ -127,6 +128,7 @@ export interface GuestDocument {
 
 export interface WeddingEvent {
   id: string;
+  rsvpToken: string; // Unique token for guest RSVP link
   groomName: string;
   brideName: string;
   coupleStory: string;
@@ -239,25 +241,163 @@ export function generateOTP(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// Event functions
-export function getEvents(): WeddingEvent[] {
-  return getItem<WeddingEvent[]>('wedding_events', []);
+export function generateRSVPToken(): string {
+  // Generate a URL-safe token (16 characters)
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15);
 }
 
-export function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt'>): WeddingEvent {
-  const events = getEvents();
+// Event functions
+export function getEvents(): WeddingEvent[] {
+  const events = getItem<WeddingEvent[]>('wedding_events', []);
+  
+  // Migration: Add rsvpToken to events that don't have one
+  let hasUpdates = false;
+  const migratedEvents = events.map(event => {
+    if (!event.rsvpToken) {
+      hasUpdates = true;
+      return {
+        ...event,
+        rsvpToken: generateRSVPToken(),
+      };
+    }
+    return event;
+  });
+  
+  // Save migrated events if updates were made
+  if (hasUpdates) {
+    setItem('wedding_events', migratedEvents);
+  }
+  
+  return migratedEvents;
+}
+
+export async function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' | 'rsvpToken'>): Promise<WeddingEvent> {
   const newEvent: WeddingEvent = {
     ...event,
     id: uuidv4(),
+    rsvpToken: generateRSVPToken(),
     createdAt: new Date().toISOString(),
   };
+
+  console.log('📝 Creating event:', newEvent.groomName, '&', newEvent.brideName);
+  console.log('   RSVP Token:', newEvent.rsvpToken);
+
+  // Save to Supabase first
+  try {
+    console.log('☁️ Attempting to save to Supabase...');
+    
+    const { data, error } = await supabase
+      .from('wedding_events')
+      .insert({
+        id: newEvent.id,
+        rsvp_token: newEvent.rsvpToken,
+        groom_name: newEvent.groomName,
+        bride_name: newEvent.brideName,
+        couple_story: newEvent.coupleStory,
+        wedding_date: newEvent.weddingDate,
+        venue: newEvent.venue,
+        description: newEvent.description,
+        cover_image: newEvent.coverImage,
+        created_by: newEvent.createdBy || null,  // Allow null
+        created_at: newEvent.createdAt,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Supabase save FAILED:', error);
+      console.error('   Error code:', error.code);
+      console.error('   Error message:', error.message);
+      console.error('   Error details:', error.details);
+      console.error('   Error hint:', error.hint);
+      console.warn('⚠️ Event will ONLY be saved to localStorage!');
+      console.warn('   This means RSVP link will NOT work in incognito mode!');
+    } else {
+      console.log('✅ Event saved to Supabase successfully!');
+      console.log('   Database record:', data);
+    }
+  } catch (error) {
+    console.error('❌ Exception saving to Supabase:', error);
+    console.warn('⚠️ Event will ONLY be saved to localStorage!');
+  }
+
+  // Also save to localStorage for backward compatibility
+  const events = getEvents();
   events.push(newEvent);
   setItem('wedding_events', events);
+  console.log('✓ Event saved to localStorage');
+  
   return newEvent;
 }
 
 export function getEventById(id: string): WeddingEvent | undefined {
   return getEvents().find(e => e.id === id);
+}
+
+export async function getEventByRSVPToken(token: string): Promise<WeddingEvent | null> {
+  console.log('Looking up RSVP token:', token);
+  
+  try {
+    // Query Supabase first (for cross-session access)
+    const { data, error } = await supabase
+      .from('wedding_events')
+      .select('*')
+      .eq('rsvp_token', token)
+      .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows
+
+    if (error) {
+      console.error('Supabase query error:', error);
+      console.log('Falling back to localStorage...');
+      // Fallback to localStorage
+      const localEvent = getEvents().find(e => e.rsvpToken === token);
+      if (localEvent) {
+        console.log('✓ Found event in localStorage:', localEvent.groomName, '&', localEvent.brideName);
+      } else {
+        console.log('✗ Event not found in localStorage either');
+      }
+      return localEvent || null;
+    }
+
+    if (data) {
+      console.log('✓ Found event in Supabase:', data.groom_name, '&', data.bride_name);
+      // Convert snake_case from DB to camelCase for frontend
+      return {
+        id: data.id,
+        rsvpToken: data.rsvp_token,
+        groomName: data.groom_name,
+        brideName: data.bride_name,
+        coupleStory: data.couple_story || '',
+        weddingDate: data.wedding_date,
+        venue: data.venue,
+        description: data.description || '',
+        coverImage: data.cover_image || '',
+        createdBy: data.created_by,
+        createdAt: data.created_at,
+      };
+    }
+
+    // No data found in Supabase, check localStorage
+    console.log('Event not in Supabase, checking localStorage...');
+    const localEvent = getEvents().find(e => e.rsvpToken === token);
+    if (localEvent) {
+      console.log('✓ Found event in localStorage:', localEvent.groomName, '&', localEvent.brideName);
+    } else {
+      console.log('✗ Event not found in localStorage either');
+    }
+    return localEvent || null;
+  } catch (error) {
+    console.error('Error fetching event by token:', error);
+    // Fallback to localStorage
+    console.log('Exception occurred, falling back to localStorage...');
+    const localEvent = getEvents().find(e => e.rsvpToken === token);
+    if (localEvent) {
+      console.log('✓ Found event in localStorage:', localEvent.groomName, '&', localEvent.brideName);
+    } else {
+      console.log('✗ Event not found anywhere');
+    }
+    return localEvent || null;
+  }
 }
 
 export function searchEvents(query: string): WeddingEvent[] {
@@ -287,22 +427,104 @@ export function getGuestsByEvent(eventId: string): Guest[] {
   return getGuests().filter(g => g.eventId === eventId);
 }
 
-export function addGuest(guest: Omit<Guest, 'id' | 'submittedAt'>): Guest {
-  const guests = getGuests();
+export async function addGuest(guest: Omit<Guest, 'id' | 'submittedAt'>): Promise<Guest> {
   const newGuest: Guest = {
     ...guest,
     id: uuidv4(),
     submittedAt: new Date().toISOString(),
   };
   
+  console.log('📝 Adding guest:', newGuest.name);
+  
   // Log document info before saving
   if (newGuest.documents && newGuest.documents.length > 0) {
     const totalDocSize = newGuest.documents.reduce((sum, doc) => sum + doc.fileSize, 0);
-    console.log(`Adding guest with ${newGuest.documents.length} documents, total size: ${(totalDocSize / (1024 * 1024)).toFixed(2)} MB`);
+    console.log(`   Documents: ${newGuest.documents.length} files, ${(totalDocSize / (1024 * 1024)).toFixed(2)} MB`);
+  }
+
+  // Save to Supabase first
+  try {
+    console.log('☁️ Attempting to save guest to Supabase...');
+    
+    const { data, error } = await supabase
+      .from('guests')
+      .insert({
+        id: newGuest.id,
+        event_id: newGuest.eventId,
+        name: newGuest.name,
+        country_code: newGuest.countryCode,
+        mobile: newGuest.mobile,
+        email: newGuest.email,
+        city: newGuest.city,
+        responding_for: newGuest.respondingFor,
+        attendance_status: newGuest.attendanceStatus,
+        function_attendance: newGuest.functionAttendance || {},
+        adults: newGuest.adults,
+        children: newGuest.children,
+        infants: newGuest.infants,
+        additional_guests: newGuest.additionalGuests || [],
+        needs_accommodation: newGuest.needsAccommodation || false,
+        check_in_date: newGuest.checkInDate || null,
+        check_out_date: newGuest.checkOutDate || null,
+        number_of_rooms: newGuest.numberOfRooms || null,
+        room_preference: newGuest.roomPreference || null,
+        preferred_roommates: newGuest.preferredRoommates || null,
+        arrival_mode: newGuest.arrivalMode || null,
+        arrival_date: newGuest.arrivalDate || null,
+        arrival_time: newGuest.arrivalTime || null,
+        arrival_transport_name: newGuest.arrivalTransportName || null,
+        arrival_number: newGuest.arrivalNumber || null,
+        arrival_location: newGuest.arrivalLocation || null,
+        arrival_itinerary_file: newGuest.arrivalItineraryFile || null,
+        departure_date: newGuest.departureDate || null,
+        departure_time: newGuest.departureTime || null,
+        departure_transport_name: newGuest.departureTransportName || null,
+        departure_number: newGuest.departureNumber || null,
+        departure_itinerary_file: newGuest.departureItineraryFile || null,
+        needs_pickup: newGuest.needsPickup || false,
+        needs_drop: newGuest.needsDrop || false,
+        transfer_passengers: newGuest.transferPassengers || 0,
+        transfer_bags: newGuest.transferBags || 0,
+        transfer_requirements: newGuest.transferRequirements || null,
+        id_type: newGuest.idType || null,
+        id_number: newGuest.idNumber || null,
+        id_front_file: newGuest.idFrontFile || null,
+        id_back_file: newGuest.idBackFile || null,
+        dietary_restrictions: newGuest.dietaryRestrictions || '',
+        special_assistance: newGuest.specialAssistance || [],
+        celebration_participation: newGuest.celebrationParticipation || [],
+        additional_notes: newGuest.additionalNotes || '',
+        info_accurate: newGuest.infoAccurate || false,
+        data_consent: newGuest.dataConsent || false,
+        submitted_at: newGuest.submittedAt,
+        upload_source: newGuest.uploadSource || null,
+        whatsapp_status: newGuest.whatsappStatus || null,
+        whatsapp_sent_at: newGuest.whatsappSentAt || null,
+        documents: newGuest.documents || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Supabase save FAILED:', error);
+      console.error('   Error code:', error.code);
+      console.error('   Error message:', error.message);
+      console.warn('⚠️ Guest will ONLY be saved to localStorage!');
+    } else {
+      console.log('✅ Guest saved to Supabase successfully!');
+      console.log('   Database record ID:', data?.id);
+    }
+  } catch (error) {
+    console.error('❌ Exception adding guest to Supabase:', error);
+    console.warn('⚠️ Guest will ONLY be saved to localStorage!');
   }
   
+  // Also save to localStorage for backward compatibility
+  const guests = getGuests();
   guests.push(newGuest);
   setItem('wedding_guests', guests);
+  console.log('✓ Guest saved to localStorage');
+  
   return newGuest;
 }
 

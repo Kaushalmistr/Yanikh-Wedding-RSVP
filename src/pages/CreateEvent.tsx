@@ -35,7 +35,7 @@ export default function CreateEvent() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -44,18 +44,23 @@ export default function CreateEvent() {
       return;
     }
 
-    createEvent({
-      groomName: groomName.trim(),
-      brideName: brideName.trim(),
-      coupleStory: coupleStory.trim(),
-      weddingDate,
-      venue: venue.trim(),
-      description: description.trim(),
-      coverImage: coverImage || DEFAULT_COVER_IMAGE,
-      createdBy: user?.id || '',
-    });
+    try {
+      await createEvent({
+        groomName: groomName.trim(),
+        brideName: brideName.trim(),
+        coupleStory: coupleStory.trim(),
+        weddingDate,
+        venue: venue.trim(),
+        description: description.trim(),
+        coverImage: coverImage || DEFAULT_COVER_IMAGE,
+        createdBy: user?.id || '',
+      });
 
-    navigate('/dashboard');
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Error creating event:', err);
+      setError('Failed to create event. Please try again.');
+    }
   };
 
   return (
