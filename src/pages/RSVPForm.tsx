@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getEventById, getEventByRSVPToken, addGuest, type WeddingEvent } from '../lib/db';
-import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, Phone, X, File } from 'lucide-react';
-import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, formatIdForDisplay, validateFlightPNR, validateTrainPNR } from '../lib/constants';
+import { getEventById, getEventByRSVPToken, addGuest, type WeddingEvent, type GuestDocument } from '../lib/db';
+import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, X, File, RefreshCw, AlertCircle } from 'lucide-react';
+import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 import CountryCodeSelect from '../components/CountryCodeSelect';
-import { createGuestDocument, type GuestDocument } from '../lib/documentService';
+import { createGuestDocument } from '../lib/documentService';
 import { logStorageStats } from '../utils/storageDebug';
 
 const ID_TYPES = ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID'];
@@ -43,12 +43,15 @@ function hasMainTrainTravelReady(fd: {
 }
 
 export default function RSVPForm() {
-  const params = useParams<{ id?: string; token?: string }>();
+  const { id, token } = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<WeddingEvent | null>(null);
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const [expandedGuests, setExpandedGuests] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
@@ -129,32 +132,46 @@ export default function RSVPForm() {
 
   useEffect(() => {
     // Handle both authenticated (/rsvp/:id) and guest (/rsvp/guest/:token) access
-    const eventId = params.id;
-    const token = params.token;
-
     async function loadEvent() {
-      if (eventId) {
-        // Admin authenticated access via event ID
-        const ev = getEventById(eventId);
-        if (ev) setEvent(ev);
-      } else if (token) {
-        // Guest public access via RSVP token
-        try {
-          const ev = await getEventByRSVPToken(token);
+      setLoading(true);
+      setError('');
+      
+      try {
+        if (id) {
+          // Admin authenticated access via event ID
+          const ev = getEventById(id);
           if (ev) {
             setEvent(ev);
           } else {
-            setError('Invalid RSVP link. Please check the link and try again.');
+            setError('Event not found. Please check the event ID.');
           }
-        } catch (err) {
-          console.error('Error loading event:', err);
-          setError('Failed to load event. Please try again.');
+        } else if (token) {
+          // Guest public access via RSVP token
+          try {
+            const ev = await getEventByRSVPToken(token);
+            if (ev) {
+              setEvent(ev);
+            } else {
+              setError('Invalid RSVP link. The event may have been deleted or the link may be expired.');
+            }
+          } catch (err) {
+            console.error('Error loading event:', err);
+            setError(
+              err instanceof Error
+                ? err.message
+                : 'Failed to load event. Please check your connection and try again.'
+            );
+          }
+        } else {
+          setError('Invalid access. No event ID or token provided.');
         }
+      } finally {
+        setLoading(false);
       }
     }
 
     loadEvent();
-  }, [params.id, params.token]);
+  }, [id, token]);
 
   // Truncate mobile number when country code changes
   useEffect(() => {
@@ -386,7 +403,17 @@ export default function RSVPForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateStep() || !event) return;
+    
+    // Prevent submission if not on step 4
+    if (step !== 4) {
+      console.log('Form submission prevented - not on step 4. Current step:', step);
+      return;
+    }
+    
+    if (!validateStep() || (!id && !event?.id)) {
+      console.log('Form submission prevented - validation failed or no event ID');
+      return;
+    }
 
     const additionalAdults = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Adult').length;
     const additionalChildren = formData.additionalGuests.filter((g) => guestAgeClassification(g.age) === 'Child').length;
@@ -534,16 +561,30 @@ export default function RSVPForm() {
     console.log('documents array:', documents);
     console.log('Passing to addGuest - documents field:', documents.length > 0 ? documents : undefined);
 
-    // ADD THIS
     console.log('=== DEBUG DOCUMENTS BEFORE GUEST DATA ===');
     console.log('documents variable:', documents);
     console.log('documents.length:', documents.length);
     console.log('first document:', documents[0]);
+    
+    // Debug: Log which eventId is being used
+    const finalEventId = event?.id || id || '';
+    console.log('=== EVENT ID DEBUG ===');
+    console.log('id param:', id);
+    console.log('token param:', token);
+    console.log('event object:', event);
+    console.log('event.id:', event?.id);
+    console.log('Final eventId to use:', finalEventId);
+    
+    if (!finalEventId) {
+      setError('Unable to determine event ID. Please try again or contact support.');
+      return;
+    }
 
     try {
       const guestData = {
-        eventId: event.id,
+        eventId: finalEventId,
         name: formData.name,
+        countryCode: formData.countryCode,
         mobile: formData.mobile,
         email: formData.email,
         city: formData.city,
@@ -563,6 +604,7 @@ export default function RSVPForm() {
         additionalNotes: formData.additionalNotes,
         infoAccurate: formData.infoAccurate,
         dataConsent: formData.dataConsent,
+        needsAccommodation: false,
         needsPickup: false,
         needsDrop: false,
         transferPassengers: 0,
@@ -571,10 +613,13 @@ export default function RSVPForm() {
       };
       
       console.log('Guest data object before addGuest - documents count:', guestData.documents?.length || 0);
+      console.log('Guest data eventId:', guestData.eventId);
       
       const newGuest = await addGuest(guestData);
       
       console.log(`RSVPForm: Guest created with ID: ${newGuest.id}, documents: ${newGuest.documents?.length || 0}`);
+      console.log(`RSVPForm: Guest eventId: ${newGuest.eventId}`);
+      console.log(`RSVPForm: Guest name: ${newGuest.name}`);
       
       // Log storage stats after saving
       console.log('\n=== AFTER SAVING ===');
@@ -602,6 +647,21 @@ export default function RSVPForm() {
       }
       
       console.log('Guest object returned from addGuest - documents count:', newGuest.documents?.length || 0);
+      console.log('\n=== CRITICAL: VERIFY EVENT ID SAVED ===');
+      console.log('Expected eventId:', finalEventId);
+      console.log('Saved guest eventId:', newGuest.eventId);
+      console.log('EventIds match:', newGuest.eventId === finalEventId);
+      
+      // Verify in all stored guests
+      const allGuests = localStorage.getItem('wedding_guests');
+      if (allGuests) {
+        const parsed = JSON.parse(allGuests);
+        const guestsForThisEvent = parsed.filter((g: any) => g.eventId === finalEventId);
+        console.log(`Total guests in localStorage: ${parsed.length}`);
+        console.log(`Guests for this event (${finalEventId}): ${guestsForThisEvent.length}`);
+        console.log('Guest names for this event:', guestsForThisEvent.map((g: any) => g.name));
+      }
+      
       if (newGuest.documents && newGuest.documents.length > 0) {
         console.log('Saved documents:');
         newGuest.documents.forEach((doc, i) => {
@@ -611,6 +671,12 @@ export default function RSVPForm() {
         console.log('⚠️ WARNING: addGuest returned guest with no documents');
       }
 
+      // Dispatch custom event to notify guest list to refresh
+      window.dispatchEvent(new CustomEvent('guestAdded', { 
+        detail: { eventId: finalEventId, guestId: newGuest.id } 
+      }));
+      console.log('✅ Dispatched guestAdded event for guest list refresh');
+
       setSuccess(true);
     } catch (err) {
       console.error('RSVPForm: Failed to save guest:', err);
@@ -618,6 +684,50 @@ export default function RSVPForm() {
       return;
     }
   };
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-rose-200 border-t-rose-500 mx-auto mb-6"></div>
+          <p className="text-gray-700 text-lg font-medium">Loading event...</p>
+          <p className="text-gray-500 text-sm mt-2">This usually takes a few seconds</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error screen when event can't be loaded
+  if (error && !event) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-12">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <X className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Unable to Load Event</h2>
+              <p className="text-gray-600 mb-6 whitespace-pre-wrap">{error}</p>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">
+                  💡 Tips: Check that you're using the correct link and have a stable internet connection.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-all shadow-md hover:shadow-lg inline-flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (
@@ -731,7 +841,11 @@ export default function RSVPForm() {
           </div>
 
           <div className="text-center">
-            <button onClick={() => navigate('/dashboard')} className="px-10 py-3 bg-rose-600 text-white rounded-2xl font-medium hover:bg-rose-700">Back to Dashboard</button>
+            {id ? (
+              <button type="button" onClick={() => navigate('/dashboard')} className="px-10 py-3 bg-rose-600 text-white rounded-2xl font-medium hover:bg-rose-700">Back to Dashboard</button>
+            ) : (
+              <p className="text-gray-600 text-sm">You can now close this page. Thank you for your response! 💖</p>
+            )}
           </div>
         </div>
       </div>
@@ -749,15 +863,14 @@ export default function RSVPForm() {
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50">
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-4xl mx-auto px-6 py-5 flex justify-between items-center">
-          {event && (
-            <Link to={`/event/${event.id}`} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
+          {id ? (
+            <Link to={`/event/${id}`} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
               <ArrowLeft className="w-5 h-5" /> Back to Event
             </Link>
-          )}
-          {!event && (
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-600 hover:text-rose-600">
-              <ArrowLeft className="w-5 h-5" /> Go Home
-            </button>
+          ) : (
+            <div className="flex items-center gap-2 text-gray-400">
+              <Heart className="w-5 h-5 text-rose-400" fill="currentColor" />
+            </div>
           )}
           <div className="font-bold text-xl flex items-center gap-2">
             <Heart className="text-rose-500" fill="currentColor" /> Wedding RSVP
@@ -766,52 +879,37 @@ export default function RSVPForm() {
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-10">
-        {!event && !error && (
-          <div className="text-center py-10">
-            <p className="text-gray-600">Loading RSVP form...</p>
-          </div>
-        )}
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900">{event?.groomName} & {event?.brideName}</h1>
+          <p className="text-rose-600 mt-2">Please fill this detailed RSVP form</p>
+        </div>
+
+        <div className="flex justify-between mb-10 border-b pb-6">
+          {sections.map(s => (
+            <div key={s.num} onClick={() => setStep(s.num)}
+              className={`cursor-pointer flex flex-col items-center ${step === s.num ? 'text-rose-600' : 'text-gray-400'}`}>
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border-2 mb-1 ${step === s.num ? 'border-rose-600 bg-rose-50 font-bold' : 'border-gray-200'}`}>
+                {s.num}
+              </div>
+              <div className="text-[10px] font-medium tracking-widest uppercase text-center">{s.title}</div>
+            </div>
+          ))}
+        </div>
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border-2 border-red-300 text-red-700 rounded-2xl">
             <div className="font-semibold mb-2">⚠️ Error</div>
             <div className="whitespace-pre-line text-sm">{error}</div>
-            <button 
-              onClick={() => navigate('/')} 
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              Go Home
-            </button>
           </div>
         )}
 
-        {event && (
-          <>
-            <div className="text-center mb-10">
-              <h1 className="text-4xl font-bold text-gray-900">{event.groomName} & {event.brideName}</h1>
-              <p className="text-rose-600 mt-2">Please fill this detailed RSVP form</p>
-            </div>
-
-            <div className="flex justify-between mb-10 border-b pb-6">
-              {sections.map(s => (
-                <div key={s.num} onClick={() => setStep(s.num)}
-                  className={`cursor-pointer flex flex-col items-center ${step === s.num ? 'text-rose-600' : 'text-gray-400'}`}>
-                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center border-2 mb-1 ${step === s.num ? 'border-rose-600 bg-rose-50 font-bold' : 'border-gray-200'}`}>
-                    {s.num}
-                  </div>
-                  <div className="text-[10px] font-medium tracking-widest uppercase text-center">{s.title}</div>
-                </div>
-              ))}
-            </div>
-
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border-2 border-red-300 text-red-700 rounded-2xl">
-                <div className="font-semibold mb-2">⚠️ Error</div>
-                <div className="whitespace-pre-line text-sm">{error}</div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl p-10">
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl p-10" onKeyDown={(e) => {
+          // Prevent Enter key from submitting the form unless on step 4
+          if (e.key === 'Enter' && step !== 4) {
+            e.preventDefault();
+            console.log('Enter key blocked - not on step 4');
+          }
+        }}>
 
           {/* STEP 1: Personal + ID Proof */}
           {step === 1 && (
@@ -1402,6 +1500,7 @@ export default function RSVPForm() {
                             </div>
                           </div>
                           <button 
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               removeAdditionalGuest(i);
@@ -2118,20 +2217,153 @@ export default function RSVPForm() {
 
           {/* STEP 4: Confirmation */}
           {step === 4 && (
-            <div className="max-w-3xl mx-auto space-y-8">
-              <h2 className="text-3xl font-bold text-center">Final Confirmation</h2>
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Review Your Details</h2>
+                <p className="text-gray-600 mb-2">Please review all information before submitting</p>
+                <p className="text-rose-600 font-semibold text-lg">
+                  RSVP for: {event?.groomName} & {event?.brideName}
+                </p>
+              </div>
               
+              {/* Main Guest Details */}
+              <div className="bg-gray-50 rounded-2xl p-6 border-2 border-gray-200">
+                <h3 className="text-xl font-bold mb-4 text-gray-900 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Your Details
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Full Name</p>
+                    <p className="font-semibold text-gray-900">{formData.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Gender</p>
+                    <p className="font-semibold text-gray-900">{formData.gender}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Mobile</p>
+                    <p className="font-semibold text-gray-900">{formatMobileForDisplay(formData.mobile, formData.countryCode)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Email</p>
+                    <p className="font-semibold text-gray-900 break-all">{formData.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">City</p>
+                    <p className="font-semibold text-gray-900">{formData.city}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Responding For</p>
+                    <p className="font-semibold text-gray-900">{formData.respondingFor}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Attendance Status</p>
+                    <p className={`font-semibold ${formData.attendanceStatus === 'Yes' ? 'text-green-600' : formData.attendanceStatus === 'Maybe' ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {formData.attendanceStatus}
+                    </p>
+                  </div>
+                  {formData.idType && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">ID Type</p>
+                      <p className="font-semibold text-gray-900">{formData.idType}</p>
+                    </div>
+                  )}
+                  {formData.idNumber && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">ID Number</p>
+                      <p className="font-semibold text-gray-900">{formData.idNumber}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Function Attendance */}
+              {Object.keys(formData.functionAttendance).length > 0 && (
+                <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Function Attendance</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {Object.entries(formData.functionAttendance).map(([func, status]) => (
+                      <div key={func} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-blue-100">
+                        <span className="text-sm font-medium text-gray-700">{func}</span>
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${status === 'Yes' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Guests */}
+              {formData.additionalGuests.length > 0 && (
+                <div className="bg-purple-50 rounded-2xl p-6 border-2 border-purple-200">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Additional Guests ({formData.additionalGuests.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {formData.additionalGuests.map((guest, idx) => (
+                      <div key={idx} className="bg-white rounded-xl p-4 border border-purple-100">
+                        <p className="font-bold text-gray-900 mb-2">{guest.name}</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                          <div><span className="text-gray-500">Age:</span> <span className="font-medium">{guest.age} years</span></div>
+                          <div><span className="text-gray-500">Gender:</span> <span className="font-medium">{guest.gender}</span></div>
+                          <div><span className="text-gray-500">Relation:</span> <span className="font-medium">{guest.relation}</span></div>
+                          <div><span className="text-gray-500">Mobile:</span> <span className="font-medium">{formatMobileForDisplay(guest.mobile, guest.countryCode)}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dietary & Special Assistance */}
+              {(formData.dietaryRestrictions || formData.specialAssistance.length > 0) && (
+                <div className="bg-orange-50 rounded-2xl p-6 border-2 border-orange-200">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Preferences & Assistance</h3>
+                  <div className="space-y-3">
+                    {formData.dietaryRestrictions && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Dietary Restrictions</p>
+                        <p className="font-semibold text-gray-900">{formData.dietaryRestrictions}</p>
+                      </div>
+                    )}
+                    {formData.specialAssistance.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Special Assistance</p>
+                        <p className="font-semibold text-gray-900">{formData.specialAssistance.join(', ')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Notes */}
+              {formData.additionalNotes && (
+                <div className="bg-pink-50 rounded-2xl p-6 border-2 border-pink-200">
+                  <h3 className="text-xl font-bold mb-4 text-gray-900">Additional Notes</h3>
+                  <p className="text-gray-700 italic">{formData.additionalNotes}</p>
+                </div>
+              )}
+
               {/* Declaration */}
-              <div className="space-y-6 text-left bg-white border border-gray-200 rounded-3xl p-8">
-                <h3 className="text-lg font-semibold mb-4">Declaration</h3>
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    • All the information provided is accurate to the best of my knowledge.
+              <div className="bg-gradient-to-r from-rose-50 to-pink-50 rounded-2xl p-6 border-2 border-rose-200">
+                <h3 className="text-lg font-semibold mb-3 text-gray-900">Declaration</h3>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <p className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span>All the information provided is accurate to the best of my knowledge.</span>
                   </p>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    • I consent to my data being used for wedding planning purposes only.
+                  <p className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span>I consent to my data being used for wedding planning purposes only.</span>
                   </p>
                 </div>
+              </div>
+
+              <div className="text-center text-sm text-gray-500 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                ⚠️ <strong>Important:</strong> Please review all details carefully. Once submitted, changes may require contacting the wedding organizers.
               </div>
             </div>
           )}
@@ -2141,12 +2373,19 @@ export default function RSVPForm() {
             {step < 4 ? (
               <button type="button" onClick={nextStep} className="ml-auto px-10 py-3.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-2xl font-semibold">Continue →</button>
             ) : (
-              <button type="submit" className="ml-auto px-12 py-4 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-bold text-lg rounded-2xl">Submit My RSVP 💖</button>
+              <button 
+                type="submit" 
+                className="ml-auto px-12 py-4 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-bold text-lg rounded-2xl hover:from-rose-600 hover:to-pink-700 transition-all shadow-lg hover:shadow-xl"
+                onClick={() => {
+                  // This ensures we explicitly handle the submission
+                  console.log('Submit button clicked explicitly');
+                }}
+              >
+                Submit My RSVP 💖
+              </button>
             )}
           </div>
-            </form>
-          </>
-        )}
+        </form>
       </div>
     </div>
   );

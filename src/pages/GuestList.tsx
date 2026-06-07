@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getEventById,
   getGuestsByEvent,
+  getGuestsByEventFromSupabase,
   createMessage,
   addGuest,
   addGuestsBulk,
@@ -36,6 +37,7 @@ import {
   MessageCircle,
   Pencil,
   Link as LinkIcon,
+  RefreshCw,
 } from 'lucide-react';
 import { Fragment } from 'react';
 
@@ -220,8 +222,12 @@ export default function GuestList() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const refreshGuests = () => {
-    if (id) setGuests(getGuestsByEvent(id));
+  const refreshGuests = async () => {
+    if (id) {
+      // Load from Supabase (cross-browser support)
+      const guestList = await getGuestsByEventFromSupabase(id);
+      setGuests(guestList);
+    }
   };
 
   const handleColumnFilterChange = (columnName: string, filter: ColumnFilter) => {
@@ -239,13 +245,50 @@ export default function GuestList() {
   };
 
   useEffect(() => {
-    if (id) {
+    async function loadData() {
+      if (!id) return;
+      
       const ev = getEventById(id);
       if (ev) {
         setEvent(ev);
-        setGuests(getGuestsByEvent(id));
+        // Load guests from Supabase (works across browsers)
+        const guestList = await getGuestsByEventFromSupabase(id);
+        setGuests(guestList);
       }
     }
+    
+    loadData();
+  }, [id]);
+
+  // Listen for localStorage changes (for cross-tab updates)
+  useEffect(() => {
+    const handleStorageChange = async (e: StorageEvent) => {
+      if (e.key === 'wedding_guests' && id) {
+        // Reload guests from Supabase on storage change
+        const guestList = await getGuestsByEventFromSupabase(id);
+        setGuests(guestList);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [id]);
+
+  // Listen for new guest additions (same-tab updates)
+  useEffect(() => {
+    if (!id) return;
+    
+    const handleGuestAdded = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail.eventId === id) {
+        // Reload guests from Supabase when new guest is added
+        const guestList = await getGuestsByEventFromSupabase(id);
+        setGuests(guestList);
+      }
+    };
+
+    window.addEventListener('guestAdded', handleGuestAdded);
+    return () => window.removeEventListener('guestAdded', handleGuestAdded);
   }, [id]);
 
   useEffect(() => {
@@ -810,15 +853,34 @@ export default function GuestList() {
           <div className="flex items-center gap-4 flex-wrap">
             {/* Search */}
             <div className="flex-1 min-w-64">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Filter by name"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
-                />
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter by name"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.log('Manual refresh triggered');
+                    if (id) {
+                      const guestList = getGuestsByEvent(id);
+                      console.log(`Manual refresh: found ${guestList.length} guests`);
+                      setGuests(guestList);
+                      setToast({ type: 'success', message: `Refreshed: ${guestList.length} guests found` });
+                    }
+                  }}
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm text-gray-600"
+                  title="Refresh guest list"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
               </div>
             </div>
 
@@ -1670,6 +1732,7 @@ export default function GuestList() {
           isOpen={showWhatsAppModal}
           onClose={closeWhatsAppMessageModal}
           initialMessage={composedMessage}
+          rsvpToken={event?.rsvpToken}
         />
       )}
     </div>

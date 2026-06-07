@@ -19,6 +19,7 @@ interface WhatsAppMessageModalProps {
   onClose: () => void;
   onMessageSent?: (guestId: string, success: boolean) => void;
   initialMessage?: string;
+  rsvpToken?: string; // Event RSVP token for {rsvpLink} placeholder
 }
 
 type SendStatus = 'idle' | 'sending' | 'success' | 'error' | 'fallback';
@@ -30,6 +31,7 @@ export default function WhatsAppMessageModal({
   onClose,
   onMessageSent,
   initialMessage = '',
+  rsvpToken,
 }: WhatsAppMessageModalProps) {
   const [messageText, setMessageText] = useState(initialMessage);
   const [error, setError] = useState('');
@@ -73,7 +75,9 @@ export default function WhatsAppMessageModal({
     const processedMessage = replacePlaceholders(
       messageText,
       guest.name,
-      guest.id
+      guest.id,
+      undefined, // eventName (optional)
+      rsvpToken // RSVP token for {rsvpLink}
     );
 
     if (apiEnabled) {
@@ -189,7 +193,7 @@ export default function WhatsAppMessageModal({
                         guest.mobile,
                         guest.countryCode || 'IN'
                       );
-                      const processedMsg = replacePlaceholders(messageText, guest.name, guest.id);
+                      const processedMsg = replacePlaceholders(messageText, guest.name, guest.id, undefined, rsvpToken);
                       openWhatsAppWeb(formattedPhone, processedMsg);
                       setStatusMessage('Opened WhatsApp Web as fallback.');
                       setSendStatus('fallback');
