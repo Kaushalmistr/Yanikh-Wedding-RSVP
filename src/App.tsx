@@ -79,6 +79,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/rsvp/guest/:token"
+        element={<RSVPForm />}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

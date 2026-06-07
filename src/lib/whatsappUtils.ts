@@ -212,23 +212,26 @@ export function isValidWhatsAppNumber(phoneNumber: string): boolean {
  * - {guestName} → Guest's full name
  * - {guestId} → Guest's unique ID
  * - {eventName} → Wedding event name (groom + bride)
+ * - {rsvpLink} → Unique RSVP link for the guest
  * 
  * @param message - Message containing placeholders
  * @param guestName - Guest's full name
  * @param guestId - Guest's unique ID (optional)
  * @param eventName - Wedding event name (optional)
+ * @param rsvpToken - Event RSVP token for generating the link (optional)
  * @returns Message with placeholders replaced
  *
  * @example
- * const msg = 'Dear {guestName}, we invite you to our wedding!';
- * replacePlaceholders(msg, 'Rahul Sharma', 'guest-123', 'Yuvraj & Nanki');
- * // Returns: 'Dear Rahul Sharma, we invite you to our wedding!'
+ * const msg = 'Dear {guestName}, RSVP here: {rsvpLink}';
+ * replacePlaceholders(msg, 'Rahul Sharma', 'guest-123', 'Yuvraj & Nanki', 'abc-123');
+ * // Returns: 'Dear Rahul Sharma, RSVP here: https://example.com/#/rsvp/guest/abc-123'
  */
 export function replacePlaceholders(
   message: string,
   guestName: string,
   guestId?: string,
-  eventName?: string
+  eventName?: string,
+  rsvpToken?: string
 ): string {
   let result = message;
 
@@ -245,6 +248,12 @@ export function replacePlaceholders(
   // Replace {eventName} with actual event name
   if (eventName) {
     result = result.replace(/{eventName}/g, eventName);
+  }
+
+  // Replace {rsvpLink} with actual RSVP link
+  if (rsvpToken) {
+    const rsvpUrl = `${window.location.origin}/#/rsvp/guest/${rsvpToken}`;
+    result = result.replace(/{rsvpLink}/g, rsvpUrl);
   }
 
   return result;

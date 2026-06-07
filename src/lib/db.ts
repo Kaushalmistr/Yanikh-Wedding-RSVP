@@ -128,7 +128,7 @@ export interface GuestDocument {
 
 export interface WeddingEvent {
   id: string;
-  rsvpToken: string; // Unique token for guest RSVP link
+  rsvpToken?: string; // Unique token for guest RSVP access
   groomName: string;
   brideName: string;
   coupleStory: string;
@@ -241,42 +241,16 @@ export function generateOTP(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-export function generateRSVPToken(): string {
-  // Generate a URL-safe token (16 characters)
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15);
-}
-
 // Event functions
 export function getEvents(): WeddingEvent[] {
-  const events = getItem<WeddingEvent[]>('wedding_events', []);
-  
-  // Migration: Add rsvpToken to events that don't have one
-  let hasUpdates = false;
-  const migratedEvents = events.map(event => {
-    if (!event.rsvpToken) {
-      hasUpdates = true;
-      return {
-        ...event,
-        rsvpToken: generateRSVPToken(),
-      };
-    }
-    return event;
-  });
-  
-  // Save migrated events if updates were made
-  if (hasUpdates) {
-    setItem('wedding_events', migratedEvents);
-  }
-  
-  return migratedEvents;
+  return getItem<WeddingEvent[]>('wedding_events', []);
 }
 
 export async function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' | 'rsvpToken'>): Promise<WeddingEvent> {
   const newEvent: WeddingEvent = {
     ...event,
     id: uuidv4(),
-    rsvpToken: generateRSVPToken(),
+    rsvpToken: uuidv4(), // Generate unique RSVP token
     createdAt: new Date().toISOString(),
   };
 
@@ -578,7 +552,7 @@ export function addGuestsBulk(guestList: Omit<Guest, 'id' | 'submittedAt'>[]): G
  */
 export function addGuestsBulkWithWhatsApp(
   guestList: Omit<Guest, 'id' | 'submittedAt'>[],
-  eventId: string,
+  _eventId: string,
   sendWhatsApp: boolean = true
 ): Guest[] {
   const guests = getGuests();

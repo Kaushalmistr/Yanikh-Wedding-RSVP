@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getGuestsByEvent, type WeddingEvent, type Guest } from '../lib/db';
-import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase } from 'lucide-react';
+import { Heart, Calendar, MapPin, Globe, Gift, Home, Mail, Clock, List, Bell, Package, Image, MessageCircle, Share2, ChevronDown, ChevronRight, Users, Plane, Train, Briefcase, Copy, Check } from 'lucide-react';
 import { DEFAULT_COVER_IMAGE, formatMobileForDisplay } from '../lib/constants';
 
 export default function EventDetail() {
@@ -12,6 +12,7 @@ export default function EventDetail() {
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
   const [showGuestListTable, setShowGuestListTable] = useState(false);
   const [expandedGuests, setExpandedGuests] = useState<string[]>([]);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const toggleGuestExpanded = (guestId: string) => {
     setExpandedGuests(prev => 
@@ -19,6 +20,16 @@ export default function EventDetail() {
         ? prev.filter(id => id !== guestId)
         : [...prev, guestId]
     );
+  };
+
+  const copyRSVPLink = () => {
+    if (event?.rsvpToken) {
+      const rsvpUrl = `${window.location.origin}/#/rsvp/guest/${event.rsvpToken}`;
+      navigator.clipboard.writeText(rsvpUrl).then(() => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      });
+    }
   };
 
   useEffect(() => {
@@ -93,6 +104,28 @@ export default function EventDetail() {
                   <span className="text-base">{event.venue}</span>
                 </div>
               </div>
+              
+              {/* Copy RSVP Link Button */}
+              {event.rsvpToken && (
+                <div className="mt-6">
+                  <button
+                    onClick={copyRSVPLink}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-lg hover:from-rose-600 hover:to-pink-600 transition-all shadow-md hover:shadow-lg"
+                  >
+                    {linkCopied ? (
+                      <>
+                        <Check className="w-5 h-5" />
+                        <span className="font-medium">Link Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-5 h-5" />
+                        <span className="font-medium">Copy RSVP Link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <div className="relative w-full h-60 rounded-3xl overflow-hidden shadow-2xl">
