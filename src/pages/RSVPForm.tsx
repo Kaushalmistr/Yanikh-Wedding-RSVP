@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getEventByRSVPToken, addGuest, type WeddingEvent, type GuestDocument } from '../lib/db';
-import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, X, File } from 'lucide-react';
+import { Heart, ArrowLeft, CheckCircle, Plus, Upload, User, ChevronDown, ChevronRight, Plane, Train, Users, Briefcase, X, File, RefreshCw, AlertCircle } from 'lucide-react';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_CODE, validateMobileNumber, formatMobileForDisplay, validateEmail, validateGovernmentId, validateFlightPNR, validateTrainPNR } from '../lib/constants';
 import CountryCodeSelect from '../components/CountryCodeSelect';
 import { createGuestDocument } from '../lib/documentService';
@@ -46,9 +46,12 @@ export default function RSVPForm() {
   const { id, token } = useParams<{ id?: string; token?: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<WeddingEvent | null>(null);
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const [expandedGuests, setExpandedGuests] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
@@ -130,23 +133,40 @@ export default function RSVPForm() {
   useEffect(() => {
     // Handle both authenticated (/rsvp/:id) and guest (/rsvp/guest/:token) access
     async function loadEvent() {
-      if (id) {
-        // Admin authenticated access via event ID
-        const ev = getEventById(id);
-        if (ev) setEvent(ev);
-      } else if (token) {
-        // Guest public access via RSVP token
-        try {
-          const ev = await getEventByRSVPToken(token);
+      setLoading(true);
+      setError('');
+      
+      try {
+        if (id) {
+          // Admin authenticated access via event ID
+          const ev = getEventById(id);
           if (ev) {
             setEvent(ev);
           } else {
-            setError('Invalid RSVP link. Please check the link and try again.');
+            setError('Event not found. Please check the event ID.');
           }
-        } catch (err) {
-          console.error('Error loading event:', err);
-          setError('Failed to load event. Please try again.');
+        } else if (token) {
+          // Guest public access via RSVP token
+          try {
+            const ev = await getEventByRSVPToken(token);
+            if (ev) {
+              setEvent(ev);
+            } else {
+              setError('Invalid RSVP link. The event may have been deleted or the link may be expired.');
+            }
+          } catch (err) {
+            console.error('Error loading event:', err);
+            setError(
+              err instanceof Error
+                ? err.message
+                : 'Failed to load event. Please check your connection and try again.'
+            );
+          }
+        } else {
+          setError('Invalid access. No event ID or token provided.');
         }
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -664,6 +684,50 @@ export default function RSVPForm() {
       return;
     }
   };
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-rose-200 border-t-rose-500 mx-auto mb-6"></div>
+          <p className="text-gray-700 text-lg font-medium">Loading event...</p>
+          <p className="text-gray-500 text-sm mt-2">This usually takes a few seconds</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error screen when event can't be loaded
+  if (error && !event) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 to-pink-50 p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-12">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <X className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Unable to Load Event</h2>
+              <p className="text-gray-600 mb-6 whitespace-pre-wrap">{error}</p>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">
+                  💡 Tips: Check that you're using the correct link and have a stable internet connection.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-all shadow-md hover:shadow-lg inline-flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (

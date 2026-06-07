@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getEventById,
   getGuestsByEvent,
+  getGuestsByEventFromSupabase,
   createMessage,
   addGuest,
   addGuestsBulk,
@@ -221,8 +222,12 @@ export default function GuestList() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const refreshGuests = () => {
-    if (id) setGuests(getGuestsByEvent(id));
+  const refreshGuests = async () => {
+    if (id) {
+      // Load from Supabase (cross-browser support)
+      const guestList = await getGuestsByEventFromSupabase(id);
+      setGuests(guestList);
+    }
   };
 
   const handleColumnFilterChange = (columnName: string, filter: ColumnFilter) => {
@@ -240,35 +245,27 @@ export default function GuestList() {
   };
 
   useEffect(() => {
-    if (id) {
-      console.log('GuestList: useEffect triggered with id:', id);
+    async function loadData() {
+      if (!id) return;
+      
       const ev = getEventById(id);
-      console.log('GuestList: Event found:', ev);
       if (ev) {
         setEvent(ev);
-        
-        // Debug: Check localStorage directly
-        const allGuestsInStorage = localStorage.getItem('wedding_guests');
-        console.log('GuestList: Raw localStorage data:', allGuestsInStorage);
-        
-        const guestList = getGuestsByEvent(id);
-        console.log(`GuestList: Loading guests for event ${id}, found ${guestList.length} guests`);
-        console.log('GuestList: Guest IDs:', guestList.map(g => ({ id: g.id, name: g.name, eventId: g.eventId })));
+        // Load guests from Supabase (works across browsers)
+        const guestList = await getGuestsByEventFromSupabase(id);
         setGuests(guestList);
-      } else {
-        console.log('GuestList: No event found for id:', id);
       }
     }
+    
+    loadData();
   }, [id]);
 
   // Listen for localStorage changes (for cross-tab updates)
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      console.log('GuestList: localStorage changed', e.key);
+    const handleStorageChange = async (e: StorageEvent) => {
       if (e.key === 'wedding_guests' && id) {
-        console.log('GuestList: Guests data changed, reloading');
-        const guestList = getGuestsByEvent(id);
-        console.log(`GuestList: After storage change - found ${guestList.length} guests`);
+        // Reload guests from Supabase on storage change
+        const guestList = await getGuestsByEventFromSupabase(id);
         setGuests(guestList);
       }
     };
@@ -281,14 +278,11 @@ export default function GuestList() {
   useEffect(() => {
     if (!id) return;
     
-    const handleGuestAdded = (event: Event) => {
+    const handleGuestAdded = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('GuestList: Received guestAdded event', customEvent.detail);
       if (customEvent.detail.eventId === id) {
-        console.log('GuestList: Event ID matches, refreshing guest list');
-        // Reload guests
-        const guestList = getGuestsByEvent(id);
-        console.log(`GuestList: After refresh - found ${guestList.length} guests`);
+        // Reload guests from Supabase when new guest is added
+        const guestList = await getGuestsByEventFromSupabase(id);
         setGuests(guestList);
       }
     };

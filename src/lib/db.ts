@@ -184,14 +184,26 @@ function getItem<T>(key: string, fallback: T): T {
 
 function setItem<T>(key: string, data: T): void {
   try {
+    console.log(`🔐 setItem: Preparing to save key "${key}"...`);
     const jsonData = JSON.stringify(data);
     const sizeInMB = (new Blob([jsonData]).size / (1024 * 1024)).toFixed(2);
-    console.log(`Attempting to save ${key}: ${sizeInMB} MB`);
+    console.log(`📦 setItem: Data size for "${key}": ${sizeInMB} MB`);
+    console.log(`📝 setItem: Calling localStorage.setItem("${key}", ...)...`);
+    
     localStorage.setItem(key, jsonData);
-    console.log(`Successfully saved ${key}`);
+    
+    console.log(`✅ setItem: Successfully saved "${key}" to localStorage`);
+    
+    // Verify it was actually saved
+    const retrieved = localStorage.getItem(key);
+    if (retrieved) {
+      console.log(`✔️ setItem: Verification passed - data is retrievable from localStorage`);
+    } else {
+      console.error(`❌ setItem: Verification FAILED - saved data is not retrievable!`);
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'QuotaExceededError') {
-      console.error('LocalStorage quota exceeded!', error);
+      console.error('❌ setItem: LocalStorage quota exceeded!', error);
       // Calculate current storage usage
       let totalSize = 0;
       for (let i = 0; i < localStorage.length; i++) {
@@ -207,6 +219,7 @@ function setItem<T>(key: string, data: T): void {
         `Tip: Try uploading smaller images or fewer documents at once.`
       );
     }
+    console.error(`❌ setItem: Error saving "${key}":`, error);
     throw error;
   }
 }
@@ -247,6 +260,8 @@ export function getEvents(): WeddingEvent[] {
 }
 
 export async function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' | 'rsvpToken'>): Promise<WeddingEvent> {
+  console.log('🚀 createEvent STARTED - Creating event object...');
+  
   const newEvent: WeddingEvent = {
     ...event,
     id: uuidv4(),
@@ -255,12 +270,43 @@ export async function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' |
   };
 
   console.log('📝 Creating event:', newEvent.groomName, '&', newEvent.brideName);
+  console.log('   Event ID:', newEvent.id);
   console.log('   RSVP Token:', newEvent.rsvpToken);
+  console.log('   Created At:', newEvent.createdAt);
 
-  // Save to Supabase first
+  // CRITICAL: Save to localStorage FIRST (guaranteed primary storage)
+  // This ensures the event is always available in the browser
+  console.log('💾 CRITICAL: Saving to localStorage FIRST (primary storage)...');
+  
+  const events = getEvents();
+  console.log(`📊 Events retrieved from storage: ${events.length} existing events`);
+  
+  events.push(newEvent);
+  console.log(`📊 After push: ${events.length} events (should be previous + 1)`);
+  
   try {
-    console.log('☁️ Attempting to save to Supabase...');
-    
+    setItem('wedding_events', events);
+    console.log('✅ CRITICAL SUCCESS: Event saved to localStorage');
+    console.log(`   Total events in storage now: ${events.length}`);
+    console.log('   Dashboard can now see this event!');
+  } catch (err) {
+    console.error('❌ CRITICAL FAILURE: Could not save to localStorage:', err);
+    throw err; // Must fail if localStorage doesn't work
+  }
+  
+  // Verify the save by immediately reading back
+  const verify = getEvents();
+  console.log(`🔍 Verification: ${verify.length} events now in localStorage`);
+  if (verify.length >= events.length) {
+    console.log('✅ Verification passed - event was saved to localStorage');
+  } else {
+    console.error('❌ Verification FAILED - event may not have been saved to localStorage!');
+  }
+
+  // Now try to save to Supabase as optional cloud backup
+  // If this fails, the event is still safe in localStorage
+  console.log('☁️ Optional: Attempting to save to Supabase (cloud backup)...');
+  try {
     const { data, error } = await supabase
       .from('wedding_events')
       .insert({
@@ -273,34 +319,23 @@ export async function createEvent(event: Omit<WeddingEvent, 'id' | 'createdAt' |
         venue: newEvent.venue,
         description: newEvent.description,
         cover_image: newEvent.coverImage,
-        created_by: newEvent.createdBy || null,  // Allow null
+        created_by: newEvent.createdBy || null,
         created_at: newEvent.createdAt,
       })
       .select()
       .single();
 
     if (error) {
-      console.error('❌ Supabase save FAILED:', error);
-      console.error('   Error code:', error.code);
-      console.error('   Error message:', error.message);
-      console.error('   Error details:', error.details);
-      console.error('   Error hint:', error.hint);
-      console.warn('⚠️ Event will ONLY be saved to localStorage!');
-      console.warn('   This means RSVP link will NOT work in incognito mode!');
+      console.warn('⚠️ Supabase save failed (but event is safe in localStorage):', error.message);
+      console.warn('   Event will work in this browser, but NOT across devices/incognito');
     } else {
-      console.log('✅ Event saved to Supabase successfully!');
-      console.log('   Database record:', data);
+      console.log('✅ Event also saved to Supabase (cloud backup)');
+      console.log('   Event will sync across devices and incognito windows');
     }
   } catch (error) {
-    console.error('❌ Exception saving to Supabase:', error);
-    console.warn('⚠️ Event will ONLY be saved to localStorage!');
+    console.warn('⚠️ Exception saving to Supabase (but event is safe in localStorage):', error);
+    console.log('   Event will work in this browser and dashboard');
   }
-
-  // Also save to localStorage for backward compatibility
-  const events = getEvents();
-  events.push(newEvent);
-  setItem('wedding_events', events);
-  console.log('✓ Event saved to localStorage');
   
   return newEvent;
 }
@@ -312,30 +347,33 @@ export function getEventById(id: string): WeddingEvent | undefined {
 export async function getEventByRSVPToken(token: string): Promise<WeddingEvent | null> {
   console.log('Looking up RSVP token:', token);
   
+  const SUPABASE_TIMEOUT = 5000; // 5 seconds
+  
   try {
-    // Query Supabase first (for cross-session access)
-    const { data, error } = await supabase
-      .from('wedding_events')
-      .select('*')
-      .eq('rsvp_token', token)
-      .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Event lookup timeout (network too slow). Using local cache if available.')), SUPABASE_TIMEOUT)
+    );
 
-    if (error) {
-      console.error('Supabase query error:', error);
-      console.log('Falling back to localStorage...');
-      // Fallback to localStorage
-      const localEvent = getEvents().find(e => e.rsvpToken === token);
-      if (localEvent) {
-        console.log('✓ Found event in localStorage:', localEvent.groomName, '&', localEvent.brideName);
-      } else {
-        console.log('✗ Event not found in localStorage either');
+    // Create the query promise
+    const queryPromise = (async () => {
+      const { data, error } = await supabase
+        .from('wedding_events')
+        .select('*')
+        .eq('rsvp_token', token)
+        .maybeSingle();
+      
+      if (error) {
+        throw error;
       }
-      return localEvent || null;
-    }
+      return data;
+    })();
+
+    // Race between timeout and query
+    const data = await Promise.race([queryPromise, timeoutPromise]);
 
     if (data) {
       console.log('✓ Found event in Supabase:', data.groom_name, '&', data.bride_name);
-      // Convert snake_case from DB to camelCase for frontend
       return {
         id: data.id,
         rsvpToken: data.rsvp_token,
@@ -400,6 +438,122 @@ export function getGuests(): Guest[] {
 export function getGuestsByEvent(eventId: string): Guest[] {
   return getGuests().filter(g => g.eventId === eventId);
 }
+
+/**
+ * Load guests for an event from Supabase (works across browsers/sessions)
+ * Falls back to localStorage if Supabase unavailable
+ * @param eventId The event ID
+ * @returns Array of guests for the event
+ */
+export async function getGuestsByEventFromSupabase(eventId: string): Promise<Guest[]> {
+  console.log('🔄 Loading guests from Supabase for event:', eventId);
+  
+  const SUPABASE_TIMEOUT = 5000; // 5 seconds
+  
+  try {
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Guest list load timeout (network too slow). Using local cache.')),
+        SUPABASE_TIMEOUT
+      )
+    );
+
+    // Create the query promise
+    const queryPromise = (async () => {
+      const { data, error } = await supabase
+        .from('guests')
+        .select('*')
+        .eq('event_id', eventId);
+      
+      if (error) {
+        throw error;
+      }
+      return data || [];
+    })();
+
+    // Race between timeout and query
+    const data = await Promise.race([queryPromise, timeoutPromise]);
+
+    if (data && data.length > 0) {
+      console.log(`✅ Loaded ${data.length} guests from Supabase`);
+      
+      // Transform Supabase format to Guest format
+      return data.map(dbGuest => ({
+        id: dbGuest.id,
+        eventId: dbGuest.event_id,
+        name: dbGuest.name,
+        countryCode: dbGuest.country_code,
+        mobile: dbGuest.mobile,
+        email: dbGuest.email,
+        city: dbGuest.city,
+        respondingFor: dbGuest.responding_for,
+        attendanceStatus: dbGuest.attendance_status,
+        functionAttendance: dbGuest.function_attendance || {},
+        adults: dbGuest.adults,
+        children: dbGuest.children,
+        infants: dbGuest.infants,
+        additionalGuests: dbGuest.additional_guests || [],
+        needsAccommodation: dbGuest.needs_accommodation,
+        checkInDate: dbGuest.check_in_date,
+        checkOutDate: dbGuest.check_out_date,
+        numberOfRooms: dbGuest.number_of_rooms,
+        roomPreference: dbGuest.room_preference,
+        preferredRoommates: dbGuest.preferred_roommates,
+        arrivalMode: dbGuest.arrival_mode,
+        arrivalDate: dbGuest.arrival_date,
+        arrivalTime: dbGuest.arrival_time,
+        arrivalTransportName: dbGuest.arrival_transport_name,
+        arrivalNumber: dbGuest.arrival_number,
+        arrivalLocation: dbGuest.arrival_location,
+        arrivalItineraryFile: dbGuest.arrival_itinerary_file,
+        departureDate: dbGuest.departure_date,
+        departureTime: dbGuest.departure_time,
+        departureTransportName: dbGuest.departure_transport_name,
+        departureNumber: dbGuest.departure_number,
+        departureItineraryFile: dbGuest.departure_itinerary_file,
+        needsPickup: dbGuest.needs_pickup,
+        needsDrop: dbGuest.needs_drop,
+        transferPassengers: dbGuest.transfer_passengers,
+        transferBags: dbGuest.transfer_bags,
+        transferRequirements: dbGuest.transfer_requirements,
+        idType: dbGuest.id_type,
+        idNumber: dbGuest.id_number,
+        idFrontFile: dbGuest.id_front_file,
+        idBackFile: dbGuest.id_back_file,
+        dietaryRestrictions: dbGuest.dietary_restrictions,
+        specialAssistance: dbGuest.special_assistance || [],
+        celebrationParticipation: dbGuest.celebration_participation || [],
+        additionalNotes: dbGuest.additional_notes,
+        infoAccurate: dbGuest.info_accurate,
+        dataConsent: dbGuest.data_consent,
+        submittedAt: dbGuest.submitted_at,
+        uploadSource: dbGuest.upload_source,
+        whatsappStatus: dbGuest.whatsapp_status,
+        whatsappSentAt: dbGuest.whatsapp_sent_at,
+        documents: dbGuest.documents || [],
+      }));
+    }
+
+    console.log('ℹ️ No guests found in Supabase, checking localStorage...');
+    const localGuests = getGuestsByEvent(eventId);
+    if (localGuests.length > 0) {
+      console.log(`✓ Found ${localGuests.length} guests in localStorage`);
+    }
+    return localGuests;
+  } catch (error) {
+    console.warn('⚠️ Could not load guests from Supabase:', error);
+    console.log('Falling back to localStorage...');
+    const localGuests = getGuestsByEvent(eventId);
+    if (localGuests.length > 0) {
+      console.log(`✓ Found ${localGuests.length} guests in localStorage`);
+    } else {
+      console.log('✗ No guests found in either Supabase or localStorage');
+    }
+    return localGuests;
+  }
+}
+
 
 export async function addGuest(guest: Omit<Guest, 'id' | 'submittedAt'>): Promise<Guest> {
   const newGuest: Guest = {
